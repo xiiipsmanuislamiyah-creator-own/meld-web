@@ -159,3 +159,14 @@
     0 14px 36px -6px rgba(0, 0, 0, 0.62),
     0 2px 10px rgba(0, 0, 0, 0.38);
 }
+
+/* === Pure Black AMOLED Option (Opt-in via Settings when Dark Mode active) === */
+[data-theme="dark"][data-pure-black="true"] {
+  --bg: #000000;
+  --surface: #0C0D11;
+  --surface-raised: #161820;
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --sidebar-bg: #050608;
+  --dock-bg: #090A0E;
+  --dock-surface: #15171F;
+}

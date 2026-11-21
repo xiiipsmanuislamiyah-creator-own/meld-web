@@ -1,4 +1,11 @@
-import type { CollectionDetail, CollectionSummary, ListeningStatEntry, ThemePreference, Track } from "../types/music";
+import type {
+  AppSettings,
+  CollectionDetail,
+  CollectionSummary,
+  ListeningStatEntry,
+  ThemePreference,
+  Track,
+} from "../types/music";
 
 const KEYS = {
   liked: "meld:liked_tracks:v1",
@@ -7,10 +14,31 @@ const KEYS = {
   recentTracks: "meld:recent_tracks:v1",
   recentSearches: "meld:recent_searches:v1",
   stats: "meld:listening_stats:v1",
+  hourlyStats: "meld:hourly_stats:v1",
   theme: "meld:theme_pref:v1",
   dynamicColor: "meld:dynamic_color:v1",
   volume: "meld:volume:v1",
+  settings: "meld:app_settings:v1",
 } as const;
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  pureBlack: false,
+  cardRadius: "soft",
+  lyricsFontSize: 18,
+  lyricsAlign: "left",
+  lyricsProgressiveBlur: true,
+  lyricsAutoScroll: true,
+  lyricsOffsetMs: 0,
+  playbackRate: 1,
+  skipSeconds: 10,
+  autoContinueRadio: true,
+  keepPausedOnChange: false,
+  autoSkipOnError: true,
+  swipeToChangeTrack: true,
+  backgroundPipEnabled: true,
+  region: "ID",
+  hideVideoSongs: false,
+};
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -41,14 +69,20 @@ export const storage = {
   saveCustomPlaylists: (pls: CollectionDetail[]) => writeJson(KEYS.customPlaylists, pls),
 
   getRecentTracks: (): Track[] => readJson<Track[]>(KEYS.recentTracks, []),
-  saveRecentTracks: (tracks: Track[]) => writeJson(KEYS.recentTracks, tracks.slice(0, 40)),
+  saveRecentTracks: (tracks: Track[]) => writeJson(KEYS.recentTracks, tracks.slice(0, 60)),
 
   getRecentSearches: (): string[] => readJson<string[]>(KEYS.recentSearches, []),
-  saveRecentSearches: (queries: string[]) => writeJson(KEYS.recentSearches, queries.slice(0, 8)),
+  saveRecentSearches: (queries: string[]) => writeJson(KEYS.recentSearches, queries.slice(0, 12)),
 
   getStats: (): Record<string, ListeningStatEntry> =>
     readJson<Record<string, ListeningStatEntry>>(KEYS.stats, {}),
   saveStats: (stats: Record<string, ListeningStatEntry>) => writeJson(KEYS.stats, stats),
+
+  getHourlyStats: (): number[] => {
+    const arr = readJson<number[]>(KEYS.hourlyStats, []);
+    return Array.isArray(arr) && arr.length === 24 ? arr : new Array<number>(24).fill(0);
+  },
+  saveHourlyStats: (hours: number[]) => writeJson(KEYS.hourlyStats, hours),
 
   getThemePref: (): ThemePreference => readJson<ThemePreference>(KEYS.theme, "light"),
   saveThemePref: (pref: ThemePreference) => writeJson(KEYS.theme, pref),
@@ -58,7 +92,50 @@ export const storage = {
 
   getVolume: (): number => readJson<number>(KEYS.volume, 85),
   saveVolume: (v: number) => writeJson(KEYS.volume, v),
+
+  getSettings: (): AppSettings => ({
+    ...DEFAULT_APP_SETTINGS,
+    ...readJson<Partial<AppSettings>>(KEYS.settings, {}),
+  }),
+  saveSettings: (settings: AppSettings) => writeJson(KEYS.settings, settings),
 };
+
+export interface MeldBackupPayload {
+  version: 1;
+  exportedAt: number;
+  likedTracks: Track[];
+  savedCollections: CollectionSummary[];
+  customPlaylists: CollectionDetail[];
+  recentTracks: Track[];
+  recentSearches: string[];
+  stats: Record<string, ListeningStatEntry>;
+  hourlyStats: number[];
+  settings: AppSettings;
+  themePref: ThemePreference;
+  dynamicColor: boolean;
+}
+
+export function exportLibraryBackupJson(): void {
+  const payload: MeldBackupPayload = {
+    version: 1,
+    exportedAt: Date.now(),
+    likedTracks: storage.getLikedTracks(),
+    savedCollections: storage.getSavedCollections(),
+    customPlaylists: storage.getCustomPlaylists(),
+    recentTracks: storage.getRecentTracks(),
+    recentSearches: storage.getRecentSearches(),
+    stats: storage.getStats(),
+    hourlyStats: storage.getHourlyStats(),
+    settings: storage.getSettings(),
+    themePref: storage.getThemePref(),
+    dynamicColor: storage.getDynamicColorEnabled(),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const dateStr = new Date().toISOString().slice(0, 10);
+  triggerDownload(blob, `meld-library-backup-${dateStr}.json`);
+}
 
 export function exportPlaylistAsM3U(title: string, tracks: Track[]): void {
   const lines = ["#EXTM3U", `#PLAYLIST:${title}`];

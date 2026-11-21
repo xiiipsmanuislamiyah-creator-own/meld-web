@@ -1,14 +1,16 @@
 import {
   Books,
+  Compass,
+  Gear,
+  Heart,
   House,
   MagnifyingGlass,
+  Monitor,
   Moon,
   Palette,
   Playlist,
   SpotifyLogo,
   Sun,
-  Monitor,
-  Heart,
 } from "@phosphor-icons/react";
 import type { NavTab } from "../types/music";
 import { useTheme } from "../context/ThemeContext";
@@ -76,6 +78,16 @@ export function Sidebar({
 
         <button
           type="button"
+          className={`nav-btn${activeTab === "explore" && !activeCollectionId ? " is-active" : ""}`}
+          onClick={() => onSelectTab("explore")}
+          aria-current={activeTab === "explore" && !activeCollectionId ? "page" : undefined}
+        >
+          <Compass size={20} weight={activeTab === "explore" && !activeCollectionId ? "fill" : "regular"} className="nav-icon" />
+          <span>Explore</span>
+        </button>
+
+        <button
+          type="button"
           className={`nav-btn${activeTab === "library" && !activeCollectionId ? " is-active" : ""}`}
           onClick={() => onSelectTab("library")}
           aria-current={activeTab === "library" && !activeCollectionId ? "page" : undefined}
@@ -87,11 +99,7 @@ export function Sidebar({
       </nav>
 
       <div className="sidebar-section">
-        <span className="sidebar-heading">Bridge</span>
-        <button type="button" className="nav-btn" onClick={onOpenSpotifyImport}>
-          <SpotifyLogo size={20} weight="fill" style={{ color: "var(--accent)" }} />
-          <span>Import Spotify</span>
-        </button>
+        <span className="sidebar-heading">Collections</span>
         <button
           type="button"
           className={`nav-btn${activeCollectionId === "liked" ? " is-active" : ""}`}
@@ -101,11 +109,15 @@ export function Sidebar({
           <span>Liked Songs</span>
           <span className="nav-btn-meta">{likedTracks.length}</span>
         </button>
+        <button type="button" className="nav-btn" onClick={onOpenSpotifyImport}>
+          <SpotifyLogo size={20} weight="fill" style={{ color: "var(--accent)" }} />
+          <span>Import Playlist</span>
+        </button>
       </div>
 
       {(customPlaylists.length > 0 || savedCollections.length > 0) && (
         <div className="sidebar-section" style={{ flex: 1, minHeight: 0 }}>
-          <span className="sidebar-heading">Your Collections</span>
+          <span className="sidebar-heading">Your Playlists</span>
           <div className="sidebar-playlist-list">
             {customPlaylists.map((pl) => (
               <button
@@ -124,6 +136,7 @@ export function Sidebar({
                 </span>
               </button>
             ))}
+
             {savedCollections.map((col) => (
               <button
                 key={col.id}
@@ -144,14 +157,29 @@ export function Sidebar({
       <div className="sidebar-footer">
         <button
           type="button"
+          className={`nav-btn${activeTab === "settings" && !activeCollectionId ? " is-active" : ""}`}
+          onClick={() => onSelectTab("settings")}
+          aria-current={activeTab === "settings" && !activeCollectionId ? "page" : undefined}
+        >
+          <Gear size={19} weight={activeTab === "settings" && !activeCollectionId ? "fill" : "regular"} className="nav-icon" />
+          <span>Settings</span>
+        </button>
+
+        <button
+          type="button"
           className="nav-btn"
           onClick={cycleTheme}
-          aria-label={`Switch theme mode, currently ${themeLabel}`}
+          aria-label={`Switch theme, current ${themeLabel}`}
         >
-          {themePref === "light" && <Sun size={19} weight="fill" />}
-          {themePref === "dark" && <Moon size={19} weight="fill" />}
-          {themePref === "system" && <Monitor size={19} />}
-          <span>{themeLabel}</span>
+          {themePref === "light" ? (
+            <Sun size={19} weight="fill" className="nav-icon" />
+          ) : themePref === "dark" ? (
+            <Moon size={19} weight="fill" className="nav-icon" />
+          ) : (
+            <Monitor size={19} className="nav-icon" />
+          )}
+          <span>Theme</span>
+          <span className="nav-btn-meta">{themeLabel}</span>
         </button>
 
         <button
@@ -161,7 +189,7 @@ export function Sidebar({
           aria-pressed={dynamicColor}
         >
           <Palette size={19} weight={dynamicColor ? "fill" : "regular"} className="nav-icon" />
-          <span>Cover chroma</span>
+          <span>Cover Chroma</span>
           <span className="nav-btn-meta">{dynamicColor ? "On" : "Off"}</span>
         </button>
       </div>

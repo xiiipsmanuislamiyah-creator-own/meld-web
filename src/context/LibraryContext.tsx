@@ -2,10 +2,12 @@ import React, { createContext, useCallback, useContext, useState } from "react";
 import type {
   CollectionDetail,
   CollectionSummary,
+  ContentRegion,
   ListeningStatEntry,
   Track,
 } from "../types/music";
-import { storage } from "../lib/storage";
+import { fetchCollectionDetail } from "../lib/api";
+import { type MeldBackupPayload, storage } from "../lib/storage";
 
 interface LibraryContextValue {
   likedTracks: Track[];
@@ -14,6 +16,7 @@ interface LibraryContextValue {
   recentTracks: Track[];
   recentSearches: string[];
   stats: Record<string, ListeningStatEntry>;
+  hourlyStats: number[];
   isLiked: (trackId: string) => boolean;
   toggleLike: (track: Track) => boolean;
   isCollectionSaved: (id: string) => boolean;
@@ -22,12 +25,17 @@ interface LibraryContextValue {
   createPlaylist: (name: string, initialTrack?: Track) => CollectionDetail;
   addTrackToPlaylist: (playlistId: string, track: Track) => boolean;
   removeTrackFromPlaylist: (playlistId: string, trackId: string) => void;
+  updatePlaylistTags: (playlistId: string, tags: string[]) => void;
   deletePlaylist: (playlistId: string) => void;
   getLocalPlaylistById: (id: string) => CollectionDetail | undefined;
+  importYtmPlaylist: (urlOrId: string, region?: ContentRegion) => Promise<CollectionDetail>;
   recordPlay: (track: Track) => void;
   addListeningSeconds: (track: Track, deltaSec: number) => void;
   addRecentSearch: (query: string) => void;
+  removeRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
+  clearListeningHistory: () => void;
+  importBackupJson: (rawText: string) => { ok: boolean; error?: string };
 }
 
 const LibraryContext = createContext<LibraryContextValue | null>(null);
@@ -43,6 +51,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [recentTracks, setRecentTracks] = useState<Track[]>(() => storage.getRecentTracks());
   const [recentSearches, setRecentSearches] = useState<string[]>(() => storage.getRecentSearches());
   const [stats, setStats] = useState<Record<string, ListeningStatEntry>>(() => storage.getStats());
+  const [hourlyStats, setHourlyStats] = useState<number[]>(() => storage.getHourlyStats());
 
   const isLiked = useCallback(
     (trackId: string) => likedTracks.some((t) => t.id === trackId || t.videoId === trackId),
@@ -52,7 +61,9 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const toggleLike = useCallback((track: Track): boolean => {
     let added = false;
     setLikedTracks((prev) => {
-      const exists = prev.some((t) => t.id === track.id || (track.videoId && t.videoId === track.videoId));
+      const exists = prev.some(
+        (t) => t.id === track.id || (track.videoId && t.videoId === track.videoId),
+      );
       const next = exists
         ? prev.filter((t) => t.id !== track.id && t.videoId !== track.videoId)
         : [track, ...prev];
@@ -105,6 +116,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       tracks,
       source: "local",
       createdAt: Date.now(),
+      tags: [],
     };
     setCustomPlaylists((prev) => {
       const next = [created, ...prev];
@@ -127,7 +139,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           tracks,
           trackCount: tracks.length,
           artwork: pl.artwork || track.artwork,
-          subtitle: `${pl.source === "spotify" ? "Imported from Spotify" : "Local Playlist"} — ${tracks.length} songs`,
+          subtitle: `${pl.source === "spotify" ? "Imported from Spotify" : pl.source === "ytm" ? "Imported from YouTube Music" : "Local Playlist"} — ${tracks.length} songs`,
         };
       });
       storage.saveCustomPlaylists(next);
@@ -145,9 +157,18 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           ...pl,
           tracks,
           trackCount: tracks.length,
-          subtitle: `${pl.source === "spotify" ? "Imported from Spotify" : "Local Playlist"} — ${tracks.length} songs`,
+          subtitle: `${pl.source === "spotify" ? "Imported from Spotify" : pl.source === "ytm" ? "Imported from YouTube Music" : "Local Playlist"} — ${tracks.length} songs`,
         };
       });
+      storage.saveCustomPlaylists(next);
+      return next;
+    });
+  }, []);
+
+  const updatePlaylistTags = useCallback((playlistId: string, tags: string[]) => {
+    const cleaned = [...new Set(tags.map((t) => t.trim()).filter(Boolean))].slice(0, 6);
+    setCustomPlaylists((prev) => {
+      const next = prev.map((pl) => (pl.id === playlistId ? { ...pl, tags: cleaned } : pl));
       storage.saveCustomPlaylists(next);
       return next;
     });
@@ -166,9 +187,25 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     [customPlaylists],
   );
 
+  const importYtmPlaylist = useCallback(
+    async (urlOrId: string, region: ContentRegion = "ID"): Promise<CollectionDetail> => {
+      const detail = await fetchCollectionDetail(urlOrId, region);
+      const localCopy: CollectionDetail = {
+        ...detail,
+        id: `ytm-pl:${detail.id}`,
+        subtitle: `Imported from YouTube Music — ${detail.tracks.length} songs`,
+        createdAt: Date.now(),
+        tags: ["YTM Import"],
+      };
+      saveImportedOrCustomPlaylist(localCopy);
+      return localCopy;
+    },
+    [saveImportedOrCustomPlaylist],
+  );
+
   const recordPlay = useCallback((track: Track) => {
     setRecentTracks((prev) => {
-      const next = [track, ...prev.filter((t) => t.id !== track.id)].slice(0, 40);
+      const next = [track, ...prev.filter((t) => t.id !== track.id)].slice(0, 60);
       storage.saveRecentTracks(next);
       return next;
     });
@@ -206,13 +243,28 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       storage.saveStats(next);
       return next;
     });
+    const hour = new Date().getHours();
+    setHourlyStats((prev) => {
+      const next = [...prev];
+      next[hour] = (next[hour] || 0) + deltaSec;
+      storage.saveHourlyStats(next);
+      return next;
+    });
   }, []);
 
   const addRecentSearch = useCallback((query: string) => {
     const clean = query.trim();
     if (!clean) return;
     setRecentSearches((prev) => {
-      const next = [clean, ...prev.filter((q) => q.toLowerCase() !== clean.toLowerCase())].slice(0, 8);
+      const next = [clean, ...prev.filter((q) => q.toLowerCase() !== clean.toLowerCase())].slice(0, 10);
+      storage.saveRecentSearches(next);
+      return next;
+    });
+  }, []);
+
+  const removeRecentSearch = useCallback((query: string) => {
+    setRecentSearches((prev) => {
+      const next = prev.filter((q) => q !== query);
       storage.saveRecentSearches(next);
       return next;
     });
@@ -221,6 +273,56 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const clearRecentSearches = useCallback(() => {
     setRecentSearches([]);
     storage.saveRecentSearches([]);
+  }, []);
+
+  const clearListeningHistory = useCallback(() => {
+    setRecentTracks([]);
+    setStats({});
+    const zeros = new Array<number>(24).fill(0);
+    setHourlyStats(zeros);
+    storage.saveRecentTracks([]);
+    storage.saveStats({});
+    storage.saveHourlyStats(zeros);
+  }, []);
+
+  const importBackupJson = useCallback((rawText: string): { ok: boolean; error?: string } => {
+    try {
+      const parsed = JSON.parse(rawText) as Partial<MeldBackupPayload>;
+      if (!parsed || typeof parsed !== "object") {
+        return { ok: false, error: "Invalid JSON backup structure." };
+      }
+      if (Array.isArray(parsed.likedTracks)) {
+        setLikedTracks(parsed.likedTracks);
+        storage.saveLikedTracks(parsed.likedTracks);
+      }
+      if (Array.isArray(parsed.savedCollections)) {
+        setSavedCollections(parsed.savedCollections);
+        storage.saveSavedCollections(parsed.savedCollections);
+      }
+      if (Array.isArray(parsed.customPlaylists)) {
+        setCustomPlaylists(parsed.customPlaylists);
+        storage.saveCustomPlaylists(parsed.customPlaylists);
+      }
+      if (Array.isArray(parsed.recentTracks)) {
+        setRecentTracks(parsed.recentTracks);
+        storage.saveRecentTracks(parsed.recentTracks);
+      }
+      if (Array.isArray(parsed.recentSearches)) {
+        setRecentSearches(parsed.recentSearches);
+        storage.saveRecentSearches(parsed.recentSearches);
+      }
+      if (parsed.stats && typeof parsed.stats === "object") {
+        setStats(parsed.stats);
+        storage.saveStats(parsed.stats);
+      }
+      if (Array.isArray(parsed.hourlyStats) && parsed.hourlyStats.length === 24) {
+        setHourlyStats(parsed.hourlyStats);
+        storage.saveHourlyStats(parsed.hourlyStats);
+      }
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Could not parse backup JSON file." };
+    }
   }, []);
 
   return (
@@ -232,6 +334,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         recentTracks,
         recentSearches,
         stats,
+        hourlyStats,
         isLiked,
         toggleLike,
         isCollectionSaved,
@@ -240,12 +343,17 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         createPlaylist,
         addTrackToPlaylist,
         removeTrackFromPlaylist,
+        updatePlaylistTags,
         deletePlaylist,
         getLocalPlaylistById,
+        importYtmPlaylist,
         recordPlay,
         addListeningSeconds,
         addRecentSearch,
+        removeRecentSearch,
         clearRecentSearches,
+        clearListeningHistory,
+        importBackupJson,
       }}
     >
       {children}

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { LyricLine, LyricsPayload } from "../src/types/music.js";
+import { extractRuns, ytmPost } from "./_lib/ytm.js";
 
 function parseLrc(lrc: string): LyricLine[] {
   const lines: LyricLine[] = [];
@@ -32,10 +33,71 @@ function cleanTrackTitle(title: string): string {
     .trim();
 }
 
+async function fetchYtmLyricsFallback(videoId: string): Promise<LyricsPayload | null> {
+  if (!videoId) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nextData: any = await ytmPost("next", { videoId, isAudioOnly: true });
+    const tabs =
+      nextData?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer
+        ?.watchNextTabbedResultsRenderer?.tabs || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lyricsTab = tabs.find((t: any) =>
+      String(t?.tabRenderer?.endpoint?.browseEndpoint?.browseId || "").startsWith("MPLYt_"),
+    );
+    const browseId = lyricsTab?.tabRenderer?.endpoint?.browseEndpoint?.browseId;
+    if (!browseId) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const browseData: any = await ytmPost("browse", { browseId });
+    const timed =
+      browseData?.contents?.elementRenderer?.newElement?.type?.componentType?.model
+        ?.timedLyricsModel?.lyricsData ||
+      browseData?.contents?.sectionListRenderer?.contents?.[0]?.musicTimedLyricsRenderer
+        ?.timedLyricsData;
+
+    if (Array.isArray(timed) && timed.length > 0) {
+      const lines: LyricLine[] = [];
+      for (const row of timed) {
+        const text = String(row?.lyricLine || "").trim();
+        const ms = Number(row?.cueRange?.startTimeMilliseconds ?? 0);
+        if (text) lines.push({ time: ms / 1000, text });
+      }
+      if (lines.length > 0) {
+        return {
+          found: true,
+          synced: true,
+          lines,
+          plainText: lines.map((l) => l.text).join("\n"),
+          source: "ytmusic",
+        };
+      }
+    }
+
+    const desc =
+      browseData?.contents?.sectionListRenderer?.contents?.[0]?.musicDescriptionShelfRenderer
+        ?.description;
+    const plain = extractRuns(desc).join("");
+    if (plain.trim()) {
+      return {
+        found: true,
+        synced: false,
+        lines: [],
+        plainText: plain.trim(),
+        source: "ytmusic",
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=86400");
   const title = String(req.query.title || "").trim();
   const artist = String(req.query.artist || "").trim();
+  const videoId = String(req.query.videoId || "").trim();
   const duration = Number(req.query.duration || 0);
 
   if (!title) {
@@ -48,7 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const headers = { "User-Agent": "MeldWeb/1.0 (https://github.com/xiiipsmanuislamiyah-creator-own/meld-web)" };
 
-    // 1. Exact get lookup
+    // 1. Exact LRCLIB lookup
     const exactParams = new URLSearchParams({
       track_name: cleanedTitle,
       artist_name: primaryArtist,
@@ -76,7 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 2. Fallback search lookup
+    // 2. Fallback LRCLIB search lookup
     const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(`${cleanedTitle} ${primaryArtist}`)}`;
     const searchRes = await fetch(searchUrl, { headers });
     if (searchRes.ok) {
@@ -85,17 +147,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (Array.isArray(list) && list.length > 0) {
         const best = list.find((x) => Boolean(x?.syncedLyrics)) || list[0];
         const syncedLines = best?.syncedLyrics ? parseLrc(best.syncedLyrics) : [];
-        const payload: LyricsPayload = {
-          found: Boolean(syncedLines.length || best?.plainLyrics),
-          synced: syncedLines.length > 0,
-          trackName: best?.trackName,
-          artistName: best?.artistName,
-          lines: syncedLines,
-          plainText: best?.plainLyrics || syncedLines.map((l) => l.text).join("\n"),
-          source: "lrclib",
-        };
-        return res.status(200).json(payload);
+        if (syncedLines.length || best?.plainLyrics) {
+          const payload: LyricsPayload = {
+            found: true,
+            synced: syncedLines.length > 0,
+            trackName: best?.trackName,
+            artistName: best?.artistName,
+            lines: syncedLines,
+            plainText: best?.plainLyrics || syncedLines.map((l) => l.text).join("\n"),
+            source: "lrclib",
+          };
+          return res.status(200).json(payload);
+        }
       }
+    }
+
+    // 3. Fallback to YouTube Music native lyrics
+    if (videoId) {
+      const ytm = await fetchYtmLyricsFallback(videoId);
+      if (ytm) return res.status(200).json(ytm);
     }
 
     return res.status(200).json({

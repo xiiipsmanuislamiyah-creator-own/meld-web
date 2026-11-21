@@ -84,7 +84,7 @@ All colors are declared at `:root` in `src/styles/tokens.css` and dynamically up
 - **Container widths:** `--container-max: 1180px` centered inside the main stage; gutters expand cleanly on ultrawide monitors.
 - **Desktop 3-Panel Studio Grid (`> 1180px`):** `256px` Left Sidebar + `minmax(0, 1fr)` Main Stage + `356px` Toggleable Right Studio Drawer.
 - **Tablet (`861px–1180px`):** Left Sidebar + Main Stage; Studio Inspector accessible inside full-screen Now Playing.
-- **Mobile (`≤ 860px`, verified at `390×844`):** Single-column Main Stage + signature Floating Dark Mini-Player Dock hovering cleanly `10px` above the `64px` 4-item Bottom Navigation Bar (`Home`, `Search`, `Library`, `Import`) with `env(safe-area-inset-bottom)` support.
+- **Mobile (`≤ 860px`, verified at `390×844`):** Single-column Main Stage + signature Floating Dark Mini-Player Dock hovering cleanly `10px` above the `64px` 4-item Bottom Navigation Bar (`Home`, `Search`, `Explore`, `Library`) with `env(safe-area-inset-bottom)` support. Top bar includes the `MiniNowPill` quick playback popover and direct `Settings` access.
 - **Horizontal card rails (`HorizontalRail.tsx`):** CSS snap carousel (`scroll-snap-type: x mandatory`), `overflow-y: hidden`, native scrollbars hidden cross-browser, `mask-image` edge fade, and `44×44px` accessible Prev/Next buttons.
 - **App Flows (B3/B4):**
   - Constant navigation placement across all views.
@@ -98,9 +98,10 @@ All colors are declared at `:root` in `src/styles/tokens.css` and dynamically up
 - **Component base:** Pure custom React 19 + TypeScript primitives styled strictly with semantic CSS tokens (no un-themed third-party UI kits).
 - **Buttons:** `.btn-primary` (obsidian pill), `.btn-accent` (dynamic cover chroma pill), `.btn-secondary` (elevated studio paper pill), `.btn-ghost`, and `44×44px` `.icon-btn` — all sharing hover elevation, `:active` scale (`0.97` / `0.93`), `:focus-visible` ring, and disabled opacity (`0.48`).
 - **WaveformScrubber:** ARIA `role="slider"` interactive multi-bar acoustic amplitude scrubber supporting pointer drag, hover timestamp preview, and keyboard arrow/Home/End seeking.
-- **TrackRow:** Numbered editorial row (`01`–`99`) with cover play overlay, active row tinting, live animated `EqualizerBars`, Like, Play Next, and Add to Playlist controls.
-- **PlayerDock:** Persistent floating dark anchor (`--dock-bg`) with live cover tint, mini waveform scrubber on desktop, compact play control on mobile, and click-to-expand full-screen Now Playing overlay.
-- **Modals:** Accessible `role="dialog" aria-modal="true"` sheets with Escape close and backdrop dismiss (`SpotifyImportModal`, `CommandSearchModal`, `AddToPlaylistModal`, `NowPlayingOverlay`).
+- **TrackRow & TrackContextMenu:** Numbered editorial row (`01`–`99`) with cover play overlay, active row tinting, live animated `EqualizerBars`, Like, Play Next, Add to Playlist, and accessible `TrackContextMenu` (Play Next, Add to Queue, Start Radio, Go to Album/Artist, Copy Link).
+- **Explore, Dual-Scope Search & Settings:** `ExploreView` (Mood tiles, Top 3 Podium, Ranked Charts, New Releases), Dual-Scope `SearchView` (Online + Local Library, Vibes Grid, Autocomplete, Top Result, Artist Cards), `SettingsView` (Appearance + Pure Black AMOLED, Player & Speed, Lyrics Offset & Blur, Region, JSON Backup/Restore), and `LyricsShareModal` (PNG quote card exporter).
+- **PlayerDock & MiniNowPill:** Persistent floating dark anchor (`--dock-bg`) with live cover tint, mini waveform scrubber on desktop, compact play control on mobile, plus top-bar `MiniNowPill` popover and Background PiP (`Document PiP` / `Canvas PiP`).
+- **Modals:** Accessible `role="dialog" aria-modal="true"` sheets with Escape close and backdrop dismiss (`SpotifyImportModal`, `CommandSearchModal`, `AddToPlaylistModal`, `NowPlayingOverlay`, `LyricsShareModal`).
 
 ---
 

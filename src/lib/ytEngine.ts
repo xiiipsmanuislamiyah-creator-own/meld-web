@@ -1,5 +1,5 @@
-// Direct Client-Side YouTube IFrame Audio Engine (Meld Opsi 1 Architecture — Zero VPS Streaming Load)
-// Streams audio directly from Google CDN to user browser with instant seek, volume, and auto-advance.
+// Direct Client-Side YouTube IFrame Audio/Video Engine (Zero VPS Streaming Load)
+// Supports playback speed control, cue-on-change, and non-occluded mobile resilience.
 
 declare global {
   interface Window {
@@ -33,10 +33,12 @@ declare global {
 
 export interface YTPlayerInstance {
   loadVideoById(videoId: string): void;
+  cueVideoById(videoId: string): void;
   playVideo(): void;
   pauseVideo(): void;
   seekTo(seconds: number, allowSeekAhead?: boolean): void;
   setVolume(volume: number): void;
+  setPlaybackRate(rate: number): void;
   mute(): void;
   unMute(): void;
   getCurrentTime(): number;
@@ -79,8 +81,9 @@ function loadYouTubeApi(): Promise<void> {
 export class YouTubeAudioEngine {
   private player: YTPlayerInstance | null = null;
   private ready = false;
-  private pendingVideoId: string | null = null;
+  private pendingVideoId: { id: string; autoplay: boolean } | null = null;
   private pendingVolume = 85;
+  private pendingRate = 1;
   private pollTimer: number | null = null;
   private callbacks: EngineCallbacks;
 
@@ -94,8 +97,8 @@ export class YouTubeAudioEngine {
     if (!window.YT?.Player) return;
 
     this.player = new window.YT.Player(hostElement, {
-      width: "2",
-      height: "2",
+      width: "100%",
+      height: "100%",
       playerVars: {
         autoplay: 1,
         controls: 0,
@@ -111,20 +114,28 @@ export class YouTubeAudioEngine {
         onReady: () => {
           this.ready = true;
           this.player?.setVolume(this.pendingVolume);
+          this.player?.setPlaybackRate?.(this.pendingRate);
           if (this.pendingVideoId) {
-            const vid = this.pendingVideoId;
+            const { id, autoplay } = this.pendingVideoId;
             this.pendingVideoId = null;
-            this.player?.loadVideoById(vid);
+            if (autoplay) this.player?.loadVideoById(id);
+            else this.player?.cueVideoById(id);
           }
           this.startPolling();
         },
         onStateChange: (ev) => {
           const PS = window.YT?.PlayerState;
           if (!PS) return;
-          if (ev.data === PS.PLAYING) this.callbacks.onStateChange("playing");
-          else if (ev.data === PS.PAUSED) this.callbacks.onStateChange("paused");
-          else if (ev.data === PS.BUFFERING) this.callbacks.onStateChange("buffering");
-          else if (ev.data === PS.ENDED) this.callbacks.onStateChange("ended");
+          if (ev.data === PS.PLAYING) {
+            this.player?.setPlaybackRate?.(this.pendingRate);
+            this.callbacks.onStateChange("playing");
+          } else if (ev.data === PS.PAUSED) {
+            this.callbacks.onStateChange("paused");
+          } else if (ev.data === PS.BUFFERING) {
+            this.callbacks.onStateChange("buffering");
+          } else if (ev.data === PS.ENDED) {
+            this.callbacks.onStateChange("ended");
+          }
         },
         onError: (ev) => {
           this.callbacks.onError(ev.data);
@@ -147,12 +158,16 @@ export class YouTubeAudioEngine {
     }, 350);
   }
 
-  load(videoId: string): void {
+  load(videoId: string, autoplay = true): void {
     if (!this.ready || !this.player) {
-      this.pendingVideoId = videoId;
+      this.pendingVideoId = { id: videoId, autoplay };
       return;
     }
-    this.player.loadVideoById(videoId);
+    if (autoplay) {
+      this.player.loadVideoById(videoId);
+    } else {
+      this.player.cueVideoById(videoId);
+    }
   }
 
   play(): void {
@@ -180,10 +195,36 @@ export class YouTubeAudioEngine {
     }
   }
 
+  setPlaybackRate(rate: number): void {
+    this.pendingRate = rate;
+    if (this.ready && this.player) {
+      try {
+        this.player.setPlaybackRate(rate);
+      } catch {
+        // some environments clamp rate
+      }
+    }
+  }
+
   setMuted(muted: boolean): void {
     if (!this.ready || !this.player) return;
     if (muted) this.player.mute();
     else this.player.unMute();
+  }
+
+  syncOnVisibility(): void {
+    if (!this.ready || !this.player) return;
+    try {
+      const cur = this.player.getCurrentTime() || 0;
+      const dur = this.player.getDuration() || 0;
+      this.callbacks.onProgress(cur, dur);
+      const st = this.player.getPlayerState();
+      const PS = window.YT?.PlayerState;
+      if (PS && st === PS.PLAYING) this.callbacks.onStateChange("playing");
+      else if (PS && st === PS.PAUSED) this.callbacks.onStateChange("paused");
+    } catch {
+      // ignore
+    }
   }
 
   destroy(): void {

@@ -1,4 +1,4 @@
-import type { CollectionSummary, Track } from "../../src/types/music.js";
+import type { ArtistSummary, CollectionSummary, ContentRegion, Track } from "../../src/types/music.js";
 
 const YTM_BASE = "https://music.youtube.com/youtubei/v1";
 
@@ -11,27 +11,34 @@ const YTM_HEADERS: Record<string, string> = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-const YTM_CONTEXT = {
-  client: {
-    clientName: "WEB_REMIX",
-    clientVersion: "1.20241118.01.00",
-    hl: "en",
-    gl: "ID",
-  },
-};
+const VALID_REGIONS = new Set(["ID", "US", "JP", "KR", "GB"]);
+
+export function sanitizeRegion(raw?: string): ContentRegion {
+  const up = (raw || "ID").toUpperCase();
+  return (VALID_REGIONS.has(up) ? up : "ID") as ContentRegion;
+}
 
 export async function ytmPost<T = Record<string, unknown>>(
   endpoint: string,
   payload: Record<string, unknown>,
+  region = "ID",
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 9000);
+  const gl = sanitizeRegion(region);
   try {
     const res = await fetch(`${YTM_BASE}/${endpoint}?prettyPrint=false`, {
       method: "POST",
       headers: YTM_HEADERS,
       body: JSON.stringify({
-        context: YTM_CONTEXT,
+        context: {
+          client: {
+            clientName: "WEB_REMIX",
+            clientVersion: "1.20241118.01.00",
+            hl: "en",
+            gl,
+          },
+        },
         ...payload,
       }),
       signal: controller.signal,
@@ -57,7 +64,7 @@ export function stripEmojis(input: string): string {
 
 export function upgradeThumb(url: string | undefined, size = 544): string {
   if (!url) return "";
-  if (url.includes("googleusercontent.com")) {
+  if (url.includes("googleusercontent.com") || url.includes("ggpht.com")) {
     return url.replace(/=w\d+-h\d+[^&]*/i, `=w${size}-h${size}-l90-rj`);
   }
   return url;
@@ -110,6 +117,8 @@ export function parseResponsiveTrack(item: any, fallbackArtwork = "", fallbackAr
   const title = stripEmojis(col0.join("") || "Untitled Track");
   const metaTokens = col1.map((t) => t.trim()).filter((t) => t && t !== "•" && t !== "·");
 
+  const isVideo = metaTokens.some((t) => /^Video$/i.test(t));
+
   let durationText = fixed0[0] || "";
   if (!durationText) {
     const found = metaTokens.find((t) => /^\d+:\d{2}(:\d{2})?$/.test(t));
@@ -125,14 +134,15 @@ export function parseResponsiveTrack(item: any, fallbackArtwork = "", fallbackAr
       !/views$/i.test(t),
   );
 
-  // Extract album browseId if available in flexColumn 1 runs
   let albumId: string | undefined;
+  let artistId: string | undefined;
   const col1Runs = item?.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const run of col1Runs) {
     const bid = run?.navigationEndpoint?.browseEndpoint?.browseId;
-    if (typeof bid === "string" && bid.startsWith("MPREb_")) {
-      albumId = bid;
+    if (typeof bid === "string") {
+      if (bid.startsWith("MPREb_")) albumId = bid;
+      else if ((bid.startsWith("UC") || bid.startsWith("MPAD")) && !artistId) artistId = bid;
     }
   }
 
@@ -153,6 +163,7 @@ export function parseResponsiveTrack(item: any, fallbackArtwork = "", fallbackAr
     videoId,
     title,
     artist,
+    artistId,
     album: album && album !== artist ? album : undefined,
     albumId,
     durationSec,
@@ -160,6 +171,29 @@ export function parseResponsiveTrack(item: any, fallbackArtwork = "", fallbackAr
     artwork,
     source: "ytm",
     plays,
+    isVideo,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parseResponsiveArtist(item: any): ArtistSummary | null {
+  if (!item) return null;
+  const browseId: string | undefined = item?.navigationEndpoint?.browseEndpoint?.browseId;
+  if (!browseId || (!browseId.startsWith("UC") && !browseId.startsWith("MPAD"))) return null;
+
+  const col0 = extractRuns(item?.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text);
+  const col1 = extractRuns(item?.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text)
+    .map((s) => s.trim())
+    .filter((s) => s && s !== "•" && s !== "·" && !/^Artist$/i.test(s));
+
+  const thumbs = item?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails;
+  const rawThumb = Array.isArray(thumbs) && thumbs.length > 0 ? thumbs[thumbs.length - 1]?.url : "";
+
+  return {
+    id: browseId,
+    name: stripEmojis(col0.join("") || "Unknown Artist"),
+    subscribers: stripEmojis(col1.join(" · ")) || undefined,
+    artwork: upgradeThumb(rawThumb, 360),
   };
 }
 

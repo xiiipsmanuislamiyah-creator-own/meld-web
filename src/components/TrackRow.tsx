@@ -5,6 +5,7 @@ import { useLibrary } from "../context/LibraryContext";
 import { useToast } from "../context/ToastContext";
 import { Artwork } from "./Artwork";
 import { EqualizerBars } from "./EqualizerBars";
+import { TrackContextMenu } from "./TrackContextMenu";
 
 interface TrackRowProps {
   track: Track;
@@ -12,6 +13,7 @@ interface TrackRowProps {
   compact?: boolean;
   onPlay: () => void;
   onAddToPlaylist?: (track: Track) => void;
+  onOpenCollection?: (id: string) => void;
 }
 
 export function TrackRow({
@@ -20,6 +22,7 @@ export function TrackRow({
   compact = false,
   onPlay,
   onAddToPlaylist,
+  onOpenCollection,
 }: TrackRowProps) {
   const { currentTrack, playbackState, togglePlayPause, addToQueue } = usePlayer();
   const { isLiked, toggleLike } = useLibrary();
@@ -75,11 +78,14 @@ export function TrackRow({
         <button
           type="button"
           className={`icon-btn${liked ? " is-active" : ""}`}
-          style={{ width: 38, height: 38 }}
+          style={{ width: 36, height: 36 }}
           aria-label={liked ? `Remove ${track.title} from Liked Songs` : `Like ${track.title}`}
           onClick={() => {
             const added = toggleLike(track);
-            notify(added ? `Saved "${track.title}" to Liked Songs` : `Removed "${track.title}" from Liked Songs`, "info");
+            notify(
+              added ? `Saved "${track.title}" to Liked Songs` : `Removed "${track.title}" from Liked Songs`,
+              "info",
+            );
           }}
         >
           <Heart size={18} weight={liked ? "fill" : "regular"} />
@@ -89,7 +95,7 @@ export function TrackRow({
           <button
             type="button"
             className="icon-btn track-action-desktop"
-            style={{ width: 38, height: 38 }}
+            style={{ width: 36, height: 36 }}
             aria-label={`Add ${track.title} to queue`}
             onClick={() => addToQueue(track, true)}
             title="Play Next"
@@ -102,7 +108,7 @@ export function TrackRow({
           <button
             type="button"
             className="icon-btn track-action-desktop"
-            style={{ width: 38, height: 38 }}
+            style={{ width: 36, height: 36 }}
             aria-label={`Add ${track.title} to a playlist`}
             onClick={() => onAddToPlaylist(track)}
             title="Add to Playlist"
@@ -111,7 +117,14 @@ export function TrackRow({
           </button>
         )}
 
-        <span className="track-duration">{track.durationText}</span>
+        <TrackContextMenu
+          track={track}
+          onAddToPlaylist={onAddToPlaylist}
+          onOpenCollection={onOpenCollection}
+          size={36}
+        />
+
+        {!compact && <span className="track-duration">{track.durationText}</span>}
       </div>
     </div>
   );

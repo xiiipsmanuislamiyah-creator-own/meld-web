@@ -1,15 +1,23 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { MusicNotes } from "@phosphor-icons/react";
 
 interface ArtworkProps {
   src?: string;
   alt: string;
   className?: string;
+  style?: React.CSSProperties;
   priority?: boolean;
   size?: number;
 }
 
-export function Artwork({ src, alt, className = "", priority = false, size = 300 }: ArtworkProps) {
+export function Artwork({
+  src,
+  alt,
+  className = "",
+  style,
+  priority = false,
+  size = 300,
+}: ArtworkProps) {
   const [failed, setFailed] = useState(false);
 
   if (!src || failed) {
@@ -24,6 +32,7 @@ export function Artwork({ src, alt, className = "", priority = false, size = 300
           color: "var(--ink-muted)",
           width: "100%",
           height: "100%",
+          ...style,
         }}
         role="img"
         aria-label={alt}
@@ -44,6 +53,7 @@ export function Artwork({ src, alt, className = "", priority = false, size = 300
       fetchPriority={priority ? "high" : "auto"}
       referrerPolicy="no-referrer"
       className={className}
+      style={style}
       onError={() => setFailed(true)}
     />
   );

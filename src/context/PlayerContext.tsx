@@ -12,11 +12,13 @@ import {
   fetchUpNextRadio,
   resolveTrackToVideoId,
 } from "../lib/api";
+import { BackgroundPipController, type PipMode } from "../lib/pip";
 import { storage } from "../lib/storage";
 import { YouTubeAudioEngine } from "../lib/ytEngine";
 import { useTheme } from "./ThemeContext";
 import { useLibrary } from "./LibraryContext";
 import { useToast } from "./ToastContext";
+import { useSettings } from "./SettingsContext";
 
 type PlaybackState = "idle" | "buffering" | "playing" | "paused";
 export type DrawerTab = "lyrics" | "queue" | "studio";
@@ -32,14 +34,19 @@ interface PlayerContextValue {
   muted: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  playbackRate: number;
   sleepTimerSec: number | null;
+  sleepTimerEndOfTrack: boolean;
   nowPlayingOpen: boolean;
+  videoStageOpen: boolean;
+  pipMode: PipMode;
   drawerOpen: boolean;
   drawerTab: DrawerTab;
   lyrics: LyricsPayload | null;
   lyricsLoading: boolean;
   playTrack: (track: Track, list?: Track[], startIndex?: number) => Promise<void>;
   playCollectionTracks: (tracks: Track[], startShuffle?: boolean) => Promise<void>;
+  startRadioFromTrack: (track: Track) => Promise<void>;
   togglePlayPause: () => void;
   nextTrack: () => Promise<void>;
   prevTrack: () => Promise<void>;
@@ -48,11 +55,17 @@ interface PlayerContextValue {
   toggleMute: () => void;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
+  setPlaybackRate: (rate: number) => void;
   addToQueue: (track: Track, playNext?: boolean) => void;
   removeFromQueue: (index: number) => void;
   moveQueueItem: (from: number, to: number) => void;
+  clearUpNextQueue: () => void;
+  shuffleUpNextQueue: () => void;
   setSleepTimerMinutes: (minutes: number | null) => void;
+  setSleepTimerEndOfTrack: (enabled: boolean) => void;
   setNowPlayingOpen: (open: boolean) => void;
+  setVideoStageOpen: (open: boolean) => void;
+  togglePictureInPicture: () => Promise<void>;
   setDrawerOpen: (open: boolean) => void;
   setDrawerTab: (tab: DrawerTab) => void;
 }
@@ -72,6 +85,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const { syncArtworkPalette } = useTheme();
   const { recordPlay, addListeningSeconds } = useLibrary();
   const { notify } = useToast();
+  const { settings, updateSettings } = useSettings();
 
   const [queue, setQueue] = useState<Track[]>([]);
   const [queueIndex, setQueueIndex] = useState<number>(-1);
@@ -83,7 +97,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>("off");
   const [sleepTimerSec, setSleepTimerSec] = useState<number | null>(null);
+  const [sleepTimerEndOfTrack, setSleepTimerEndOfTrackState] = useState(false);
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
+  const [videoStageOpen, setVideoStageOpen] = useState(false);
+  const [pipMode, setPipMode] = useState<PipMode>("off");
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>("lyrics");
   const [lyrics, setLyrics] = useState<LyricsPayload | null>(null);
@@ -92,7 +109,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const currentTrack = queueIndex >= 0 && queueIndex < queue.length ? queue[queueIndex] : null;
 
   const engineRef = useRef<YouTubeAudioEngine | null>(null);
+  const pipRef = useRef<BackgroundPipController | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
+
   const stateRef = useRef({
     queue,
     queueIndex,
@@ -100,7 +119,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     shuffle,
     playbackState,
     currentTime,
+    duration,
     currentTrack,
+    sleepTimerEndOfTrack,
+    settings,
   });
   stateRef.current = {
     queue,
@@ -109,7 +131,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     shuffle,
     playbackState,
     currentTime,
+    duration,
     currentTrack,
+    sleepTimerEndOfTrack,
+    settings,
   };
 
   const statTickAccumulator = useRef(0);
@@ -117,7 +142,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const loadAndStartTrack = useCallback(
     async (rawTrack: Track, idxInQueue: number) => {
-      setPlaybackState("buffering");
+      const keepPaused = stateRef.current.settings.keepPausedOnChange;
+      setPlaybackState(keepPaused ? "paused" : "buffering");
       setCurrentTime(0);
       setDuration(rawTrack.durationSec || 0);
 
@@ -125,9 +151,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (!playable.videoId) {
         try {
           playable = await resolveTrackToVideoId(rawTrack);
-          setQueue((prev) =>
-            prev.map((item, i) => (i === idxInQueue ? playable : item)),
-          );
+          setQueue((prev) => prev.map((item, i) => (i === idxInQueue ? playable : item)));
         } catch (err) {
           setPlaybackState("paused");
           notify(
@@ -147,13 +171,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         recordPlay(playable);
       }
 
-      engineRef.current?.load(playable.videoId!);
+      engineRef.current?.load(playable.videoId!, !keepPaused);
     },
     [notify, recordPlay, syncArtworkPalette],
   );
 
   const nextTrack = useCallback(async () => {
-    const { queue: q, queueIndex: idx, repeat: rep, shuffle: shuf } = stateRef.current;
+    const { queue: q, queueIndex: idx, repeat: rep, shuffle: shuf, settings: cfg } =
+      stateRef.current;
     if (q.length === 0) return;
 
     if (rep === "one") {
@@ -169,6 +194,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     } else if (nextIdx >= q.length) {
       if (rep === "all") {
         nextIdx = 0;
+      } else if (cfg.autoContinueRadio && q[idx]?.videoId) {
+        try {
+          const radio = await fetchUpNextRadio(q[idx].videoId!);
+          const fresh = radio.tracks.filter((r) => !q.some((existing) => existing.id === r.id));
+          if (fresh.length > 0) {
+            setQueue([...q, ...fresh]);
+            setQueueIndex(nextIdx);
+            await loadAndStartTrack(fresh[0], nextIdx);
+            return;
+          }
+        } catch {
+          // ignore radio error and pause
+        }
+        setPlaybackState("paused");
+        return;
       } else {
         setPlaybackState("paused");
         return;
@@ -192,12 +232,30 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     await loadAndStartTrack(q[prevIdx], prevIdx);
   }, [loadAndStartTrack]);
 
-  // Mount hidden YouTube IFrame Audio Engine once
+  const togglePlayPause = useCallback(() => {
+    const st = stateRef.current.playbackState;
+    if (!stateRef.current.currentTrack) return;
+    if (st === "playing") {
+      engineRef.current?.pause();
+      setPlaybackState("paused");
+    } else {
+      engineRef.current?.play();
+      setPlaybackState("playing");
+    }
+  }, []);
+
+  // Mount YouTube IFrame Audio/Video Engine once
   useEffect(() => {
     if (!hostRef.current) return;
     const engine = new YouTubeAudioEngine({
       onStateChange: (st) => {
         if (st === "ended") {
+          if (stateRef.current.sleepTimerEndOfTrack) {
+            setSleepTimerEndOfTrackState(false);
+            setPlaybackState("paused");
+            notify("Track ended — sleep timer paused playback", "info");
+            return;
+          }
           void nextTrack();
         } else {
           setPlaybackState(st);
@@ -216,20 +274,64 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         }
       },
       onError: () => {
-        notify("Track unavailable in region — skipping to next.", "error");
-        void nextTrack();
+        if (stateRef.current.settings.autoSkipOnError) {
+          notify("Track unavailable in region — skipping to next.", "error");
+          void nextTrack();
+        } else {
+          setPlaybackState("paused");
+          notify("Track unavailable in this region.", "error");
+        }
       },
     });
     engine.setVolume(volume);
+    engine.setPlaybackRate(settings.playbackRate);
     engineRef.current = engine;
     void engine.mount(hostRef.current);
 
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        engineRef.current?.syncOnVisibility();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
       engine.destroy();
       engineRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sync playbackRate setting to engine
+  useEffect(() => {
+    engineRef.current?.setPlaybackRate(settings.playbackRate);
+  }, [settings.playbackRate]);
+
+  // PiP controller lifecycle & live updates
+  useEffect(() => {
+    pipRef.current = new BackgroundPipController({
+      onTogglePlay: () => togglePlayPause(),
+      onPrev: () => void prevTrack(),
+      onNext: () => void nextTrack(),
+      onClose: () => setPipMode("off"),
+    });
+    return () => {
+      pipRef.current?.close(false);
+      pipRef.current = null;
+    };
+  }, [nextTrack, prevTrack, togglePlayPause]);
+
+  useEffect(() => {
+    if (pipMode !== "off" && currentTrack && pipRef.current) {
+      pipRef.current.update(
+        currentTrack,
+        playbackState === "playing",
+        currentTime,
+        duration || currentTrack.durationSec,
+      );
+    }
+  }, [pipMode, currentTrack, playbackState, currentTime, duration]);
 
   // Fetch synced lyrics whenever current track changes
   useEffect(() => {
@@ -239,8 +341,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
     let cancelled = false;
     setLyricsLoading(true);
-    fetchTrackLyrics(currentTrack.title, currentTrack.artist, currentTrack.durationSec)
-      .then((res) => {
+    const params = new URLSearchParams({
+      title: currentTrack.title,
+      artist: currentTrack.artist,
+    });
+    if (currentTrack.durationSec > 0) params.set("duration", String(Math.round(currentTrack.durationSec)));
+    if (currentTrack.videoId) params.set("videoId", currentTrack.videoId);
+
+    fetch(`/api/lyrics?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : fetchTrackLyrics(currentTrack.title, currentTrack.artist, currentTrack.durationSec)))
+      .then((res: LyricsPayload) => {
         if (!cancelled) setLyrics(res);
       })
       .catch(() => {
@@ -252,7 +362,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [currentTrack?.id, currentTrack?.title, currentTrack?.artist, currentTrack?.durationSec]);
+  }, [currentTrack?.id, currentTrack?.title, currentTrack?.artist, currentTrack?.durationSec, currentTrack?.videoId]);
 
   // OS Media Session integration (Lock screen & media keys)
   useEffect(() => {
@@ -266,8 +376,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           ? [{ src: currentTrack.artwork, sizes: "544x544", type: "image/jpeg" }]
           : [],
       });
-      navigator.mediaSession.setActionHandler("play", () => engineRef.current?.play());
-      navigator.mediaSession.setActionHandler("pause", () => engineRef.current?.pause());
+      navigator.mediaSession.playbackState =
+        playbackState === "playing" ? "playing" : playbackState === "paused" ? "paused" : "none";
+      navigator.mediaSession.setActionHandler("play", () => {
+        engineRef.current?.play();
+        setPlaybackState("playing");
+      });
+      navigator.mediaSession.setActionHandler("pause", () => {
+        engineRef.current?.pause();
+        setPlaybackState("paused");
+      });
       navigator.mediaSession.setActionHandler("nexttrack", () => void nextTrack());
       navigator.mediaSession.setActionHandler("previoustrack", () => void prevTrack());
       navigator.mediaSession.setActionHandler("seekto", (d) => {
@@ -279,13 +397,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore unsupported browser mediaSession handlers
     }
-  }, [currentTrack, nextTrack, prevTrack]);
+  }, [currentTrack, playbackState, nextTrack, prevTrack]);
 
   // Sleep Timer countdown
   useEffect(() => {
     if (sleepTimerSec === null) return;
     if (sleepTimerSec <= 0) {
       engineRef.current?.pause();
+      setPlaybackState("paused");
       setSleepTimerSec(null);
       notify("Sleep timer ended — playback paused.", "info");
       return;
@@ -319,8 +438,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setQueueIndex(idx);
       await loadAndStartTrack(nextQueue[idx], idx);
 
-      // Auto-populate Up Next Radio if playing a single standalone track
-      if ((!list || list.length <= 1) && track.videoId) {
+      if (stateRef.current.settings.autoContinueRadio && (!list || list.length <= 1) && track.videoId) {
         fetchUpNextRadio(track.videoId)
           .then((radio) => {
             if (radio.tracks.length > 0) {
@@ -336,6 +454,33 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     [loadAndStartTrack],
   );
 
+  const startRadioFromTrack = useCallback(
+    async (track: Track) => {
+      let playable = track;
+      if (!playable.videoId) {
+        try {
+          playable = await resolveTrackToVideoId(track);
+        } catch (err) {
+          notify(err instanceof Error ? err.message : "Could not start radio for this track.", "error");
+          return;
+        }
+      }
+      setQueue([playable]);
+      setQueueIndex(0);
+      await loadAndStartTrack(playable, 0);
+      try {
+        const radio = await fetchUpNextRadio(playable.videoId!);
+        if (radio.tracks.length > 0) {
+          setQueue([playable, ...radio.tracks.filter((t) => t.id !== playable.id)]);
+          notify(`Started radio mix from "${playable.title}"`, "success");
+        }
+      } catch {
+        notify(`Playing "${playable.title}"`, "info");
+      }
+    },
+    [loadAndStartTrack, notify],
+  );
+
   const playCollectionTracks = useCallback(
     async (tracks: Track[], startShuffle = false) => {
       if (tracks.length === 0) return;
@@ -348,33 +493,25 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     [loadAndStartTrack],
   );
 
-  const togglePlayPause = useCallback(() => {
-    const st = stateRef.current.playbackState;
-    if (!stateRef.current.currentTrack) return;
-    if (st === "playing") {
-      engineRef.current?.pause();
-      setPlaybackState("paused");
-    } else {
-      engineRef.current?.play();
-      setPlaybackState("playing");
-    }
-  }, []);
-
   const seekTo = useCallback((seconds: number) => {
-    engineRef.current?.seekTo(seconds);
-    setCurrentTime(seconds);
+    const clamped = Math.max(0, seconds);
+    engineRef.current?.seekTo(clamped);
+    setCurrentTime(clamped);
   }, []);
 
-  const setVolume = useCallback((vol: number) => {
-    const clamped = Math.max(0, Math.min(100, vol));
-    setVolumeState(clamped);
-    storage.saveVolume(clamped);
-    if (clamped > 0 && muted) {
-      setMuted(false);
-      engineRef.current?.setMuted(false);
-    }
-    engineRef.current?.setVolume(clamped);
-  }, [muted]);
+  const setVolume = useCallback(
+    (vol: number) => {
+      const clamped = Math.max(0, Math.min(100, vol));
+      setVolumeState(clamped);
+      storage.saveVolume(clamped);
+      if (clamped > 0 && muted) {
+        setMuted(false);
+        engineRef.current?.setMuted(false);
+      }
+      engineRef.current?.setVolume(clamped);
+    },
+    [muted],
+  );
 
   const toggleMute = useCallback(() => {
     setMuted((prev) => {
@@ -391,6 +528,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const cycleRepeat = useCallback(() => {
     setRepeat((prev) => (prev === "off" ? "all" : prev === "all" ? "one" : "off"));
   }, []);
+
+  const setPlaybackRate = useCallback(
+    (rate: number) => {
+      updateSettings({ playbackRate: rate });
+      engineRef.current?.setPlaybackRate(rate);
+      notify(`Playback speed: ${rate}x`, "info");
+    },
+    [notify, updateSettings],
+  );
 
   const addToQueue = useCallback(
     (track: Track, playNext = false) => {
@@ -434,8 +580,30 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const clearUpNextQueue = useCallback(() => {
+    setQueue((prev) => {
+      const idx = stateRef.current.queueIndex;
+      if (idx < 0 || idx >= prev.length) return [];
+      return [prev[idx]];
+    });
+    setQueueIndex(0);
+    notify("Cleared upcoming queue", "info");
+  }, [notify]);
+
+  const shuffleUpNextQueue = useCallback(() => {
+    setQueue((prev) => {
+      const idx = stateRef.current.queueIndex;
+      if (idx < 0 || idx >= prev.length - 1) return prev;
+      const head = prev.slice(0, idx + 1);
+      const tail = fisherYatesShuffle(prev.slice(idx + 1));
+      return [...head, ...tail];
+    });
+    notify("Shuffled up-next queue", "info");
+  }, [notify]);
+
   const setSleepTimerMinutes = useCallback(
     (minutes: number | null) => {
+      setSleepTimerEndOfTrackState(false);
       if (minutes === null) {
         setSleepTimerSec(null);
         notify("Sleep timer cleared", "info");
@@ -447,6 +615,31 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     [notify],
   );
 
+  const setSleepTimerEndOfTrack = useCallback(
+    (enabled: boolean) => {
+      setSleepTimerSec(null);
+      setSleepTimerEndOfTrackState(enabled);
+      notify(enabled ? "Playback will pause after this track" : "End-of-track timer cleared", "info");
+    },
+    [notify],
+  );
+
+  const togglePictureInPicture = useCallback(async () => {
+    if (!currentTrack || !pipRef.current) return;
+    if (pipMode !== "off") {
+      pipRef.current.close(false);
+      setPipMode("off");
+      return;
+    }
+    const mode = await pipRef.current.open(
+      currentTrack,
+      playbackState === "playing",
+      currentTime,
+      duration || currentTrack.durationSec,
+    );
+    setPipMode(mode);
+  }, [currentTrack, pipMode, playbackState, currentTime, duration]);
+
   // Global keyboard shortcuts (ignores inputs/textareas)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -455,6 +648,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         target &&
         (target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
           target.isContentEditable)
       ) {
         return;
@@ -466,10 +660,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         togglePlayPause();
       } else if (e.key === "ArrowRight" && stateRef.current.currentTrack) {
         e.preventDefault();
-        seekTo(stateRef.current.currentTime + 5);
+        seekTo(stateRef.current.currentTime + stateRef.current.settings.skipSeconds);
       } else if (e.key === "ArrowLeft" && stateRef.current.currentTrack) {
         e.preventDefault();
-        seekTo(Math.max(0, stateRef.current.currentTime - 5));
+        seekTo(Math.max(0, stateRef.current.currentTime - stateRef.current.settings.skipSeconds));
       } else if (e.key.toLowerCase() === "n" && stateRef.current.currentTrack) {
         void nextTrack();
       } else if (e.key.toLowerCase() === "p" && stateRef.current.currentTrack) {
@@ -501,14 +695,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         muted,
         shuffle,
         repeat,
+        playbackRate: settings.playbackRate,
         sleepTimerSec,
+        sleepTimerEndOfTrack,
         nowPlayingOpen,
+        videoStageOpen,
+        pipMode,
         drawerOpen,
         drawerTab,
         lyrics,
         lyricsLoading,
         playTrack,
         playCollectionTracks,
+        startRadioFromTrack,
         togglePlayPause,
         nextTrack,
         prevTrack,
@@ -517,18 +716,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         toggleMute,
         toggleShuffle,
         cycleRepeat,
+        setPlaybackRate,
         addToQueue,
         removeFromQueue,
         moveQueueItem,
+        clearUpNextQueue,
+        shuffleUpNextQueue,
         setSleepTimerMinutes,
+        setSleepTimerEndOfTrack,
         setNowPlayingOpen,
+        setVideoStageOpen,
+        togglePictureInPicture,
         setDrawerOpen,
         setDrawerTab,
       }}
     >
       {children}
-      <div className="yt-audio-host" aria-hidden="true">
-        <div ref={hostRef} />
+      {/* Non-occluded in-viewport host (prevents mobile Chrome suspending background iframe audio, and docks visibly when Video Stage is active) */}
+      <div
+        className={`yt-audio-host${videoStageOpen && nowPlayingOpen ? " is-video-stage" : ""}`}
+        aria-hidden={!videoStageOpen || !nowPlayingOpen}
+      >
+        <div ref={hostRef} style={{ width: "100%", height: "100%" }} />
       </div>
     </PlayerContext.Provider>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Gear,
   MagnifyingGlass,
   Moon,
   Palette,
@@ -9,12 +10,14 @@ import {
 } from "@phosphor-icons/react";
 import type { NavTab, Track } from "./types/music";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { SettingsProvider } from "./context/SettingsContext";
 import { ToastProvider } from "./context/ToastContext";
 import { LibraryProvider } from "./context/LibraryContext";
 import { PlayerProvider, usePlayer } from "./context/PlayerContext";
 import { BrandMark } from "./components/BrandMark";
 import { Sidebar } from "./components/Sidebar";
 import { MobileNav } from "./components/MobileNav";
+import { MiniNowPill } from "./components/MiniNowPopover";
 import { PlayerDock } from "./components/PlayerDock";
 import { StudioDrawer } from "./components/StudioDrawer";
 import { NowPlayingOverlay } from "./components/NowPlayingOverlay";
@@ -23,8 +26,10 @@ import { CommandSearchModal } from "./components/CommandSearchModal";
 import { AddToPlaylistModal } from "./components/AddToPlaylistModal";
 import { HomeView } from "./views/HomeView";
 import { SearchView } from "./views/SearchView";
+import { ExploreView } from "./views/ExploreView";
 import { CollectionView } from "./views/CollectionView";
 import { LibraryView } from "./views/LibraryView";
+import { SettingsView } from "./views/SettingsView";
 
 function parseInitialRoute(): { tab: NavTab; collectionId: string | null } {
   const path = window.location.pathname;
@@ -35,7 +40,9 @@ function parseInitialRoute(): { tab: NavTab; collectionId: string | null } {
     };
   }
   if (path.startsWith("/search")) return { tab: "search", collectionId: null };
+  if (path.startsWith("/explore")) return { tab: "explore", collectionId: null };
   if (path.startsWith("/library")) return { tab: "library", collectionId: null };
+  if (path.startsWith("/settings")) return { tab: "settings", collectionId: null };
   return { tab: "home", collectionId: null };
 }
 
@@ -123,19 +130,21 @@ function MeldWorkspace() {
             >
               <MagnifyingGlass size={18} style={{ flexShrink: 0 }} />
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                Search songs or Spotify URL...
+                Search songs or playlist URL...
               </span>
               <span className="search-trigger-kbd">Ctrl K</span>
             </button>
           </div>
 
           <div className="topbar-actions">
+            <MiniNowPill />
+
             <button
               type="button"
               className="icon-btn icon-btn-surface topbar-hide-mobile"
               onClick={() => setSpotifyModalOpen(true)}
-              aria-label="Import Spotify playlist"
-              title="Import Spotify Playlist"
+              aria-label="Import playlist"
+              title="Import Spotify or YTM Playlist"
             >
               <SpotifyLogo size={19} weight="fill" style={{ color: "var(--accent)" }} />
             </button>
@@ -152,12 +161,22 @@ function MeldWorkspace() {
 
             <button
               type="button"
-              className="icon-btn icon-btn-surface"
+              className="icon-btn icon-btn-surface topbar-hide-mobile"
               onClick={() => setThemePref(resolvedTheme === "light" ? "dark" : "light")}
               aria-label={resolvedTheme === "light" ? "Switch to adaptive dark mode" : "Switch to light paper mode"}
               title={resolvedTheme === "light" ? "Switch to Dark" : "Switch to Light"}
             >
               {resolvedTheme === "light" ? <Moon size={19} weight="fill" /> : <Sun size={19} weight="fill" />}
+            </button>
+
+            <button
+              type="button"
+              className={`icon-btn icon-btn-surface${activeTab === "settings" && !activeCollectionId ? " is-active" : ""}`}
+              onClick={() => navigateTab("settings")}
+              aria-label="Open settings"
+              title="Settings"
+            >
+              <Gear size={19} weight={activeTab === "settings" && !activeCollectionId ? "fill" : "regular"} />
             </button>
 
             <button
@@ -177,12 +196,13 @@ function MeldWorkspace() {
             <CollectionView
               collectionId={activeCollectionId}
               onBack={() => navigateTab(activeTab)}
+              onOpenCollection={navigateCollection}
               onAddToPlaylist={setPlaylistModalTrack}
             />
           ) : activeTab === "home" ? (
             <HomeView
               onOpenCollection={navigateCollection}
-              onOpenSpotifyImport={() => setSpotifyModalOpen(true)}
+              onNavigateTab={navigateTab}
               onAddToPlaylist={setPlaylistModalTrack}
             />
           ) : activeTab === "search" ? (
@@ -192,6 +212,13 @@ function MeldWorkspace() {
               onAddToPlaylist={setPlaylistModalTrack}
               onImportedSpotify={(detail) => navigateCollection(detail.id)}
             />
+          ) : activeTab === "explore" ? (
+            <ExploreView
+              onOpenCollection={navigateCollection}
+              onAddToPlaylist={setPlaylistModalTrack}
+            />
+          ) : activeTab === "settings" ? (
+            <SettingsView />
           ) : (
             <LibraryView
               onOpenCollection={navigateCollection}
@@ -230,7 +257,6 @@ function MeldWorkspace() {
         activeTab={activeTab}
         activeCollectionId={activeCollectionId}
         onSelectTab={navigateTab}
-        onOpenSpotifyImport={() => setSpotifyModalOpen(true)}
       />
 
       <NowPlayingOverlay onAddToPlaylist={setPlaylistModalTrack} />
@@ -262,13 +288,15 @@ function MeldWorkspace() {
 export default function App() {
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <LibraryProvider>
-          <PlayerProvider>
-            <MeldWorkspace />
-          </PlayerProvider>
-        </LibraryProvider>
-      </ToastProvider>
+      <SettingsProvider>
+        <ToastProvider>
+          <LibraryProvider>
+            <PlayerProvider>
+              <MeldWorkspace />
+            </PlayerProvider>
+          </LibraryProvider>
+        </ToastProvider>
+      </SettingsProvider>
     </ThemeProvider>
   );
 }

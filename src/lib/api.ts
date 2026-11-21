@@ -1,8 +1,10 @@
 import type {
   CollectionDetail,
-  CollectionSummary,
+  ContentRegion,
   HomePayload,
   LyricsPayload,
+  SearchFilter,
+  SearchPayload,
   Track,
 } from "../types/music";
 
@@ -33,22 +35,42 @@ async function fetchJson<T>(url: string, ttlMs = 120_000): Promise<T> {
   return data;
 }
 
-export function fetchHomeFeed(mood = "all"): Promise<HomePayload> {
-  return fetchJson<HomePayload>(`/api/home?mood=${encodeURIComponent(mood)}`, 180_000);
+export function fetchHomeFeed(mood = "all", region: ContentRegion = "ID"): Promise<HomePayload> {
+  return fetchJson<HomePayload>(
+    `/api/home?mood=${encodeURIComponent(mood)}&gl=${encodeURIComponent(region)}`,
+    180_000,
+  );
 }
 
 export function searchCatalog(
   query: string,
-  filter: "songs" | "albums" | "playlists" = "songs",
-): Promise<{ query: string; filter: string; tracks: Track[]; collections: CollectionSummary[] }> {
-  return fetchJson(
-    `/api/search?q=${encodeURIComponent(query)}&filter=${encodeURIComponent(filter)}`,
+  filter: SearchFilter = "all",
+  region: ContentRegion = "ID",
+): Promise<SearchPayload> {
+  return fetchJson<SearchPayload>(
+    `/api/search?q=${encodeURIComponent(query)}&filter=${encodeURIComponent(filter)}&gl=${encodeURIComponent(region)}`,
     90_000,
   );
 }
 
-export function fetchCollectionDetail(id: string): Promise<CollectionDetail> {
-  return fetchJson<CollectionDetail>(`/api/browse?id=${encodeURIComponent(id)}`, 300_000);
+export function fetchSearchSuggestions(
+  query: string,
+  region: ContentRegion = "ID",
+): Promise<{ query: string; suggestions: string[] }> {
+  return fetchJson(
+    `/api/search?q=${encodeURIComponent(query)}&suggest=1&gl=${encodeURIComponent(region)}`,
+    60_000,
+  );
+}
+
+export function fetchCollectionDetail(
+  id: string,
+  region: ContentRegion = "ID",
+): Promise<CollectionDetail> {
+  return fetchJson<CollectionDetail>(
+    `/api/browse?id=${encodeURIComponent(id)}&gl=${encodeURIComponent(region)}`,
+    300_000,
+  );
 }
 
 export function fetchUpNextRadio(videoId: string): Promise<{ videoId: string; tracks: Track[] }> {
