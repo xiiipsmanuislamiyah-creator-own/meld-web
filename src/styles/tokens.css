@@ -1,0 +1,161 @@
+/* hallmark v2.0.0 | theme: acoustic-studio-paper (custom) | genre: atmospheric-app | signature: live cover-chroma waveform listening deck */
+/* critique: light-first tactile alabaster paper tinted dynamically by playing album artwork, anchored by an adaptive obsidian mini-player dock and harmonic dark mode */
+
+:root {
+  /* === Typography Families === */
+  --font-display: "Bricolage Grotesque", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* === Type Scale (locked single source of truth) === */
+  --text-display: clamp(1.85rem, 1.35rem + 1.8vw, 2.75rem);
+  --text-h1: clamp(1.5rem, 1.2rem + 1.1vw, 2.125rem);
+  --text-h2: clamp(1.18rem, 1.06rem + 0.45vw, 1.45rem);
+  --text-h3: 1.0625rem;
+  --text-body-lg: 1.0625rem;
+  --text-body: 1rem;
+  --text-body-sm: 0.9375rem;
+  --text-caption: 0.8125rem;
+  --text-mono-sm: 0.78125rem;
+
+  /* === Dynamic Chroma Defaults (overridden live by ColorExtractor from playing cover art) === */
+  --dyn-h: 215;
+  --dyn-accent-light: #264869;
+  --dyn-accent-dark: #8EB8E5;
+  --dyn-accent-soft-light: rgba(38, 72, 105, 0.11);
+  --dyn-accent-soft-dark: rgba(142, 184, 229, 0.16);
+  --dyn-ambient-light: rgba(38, 72, 105, 0.065);
+  --dyn-ambient-dark: rgba(58, 96, 138, 0.24);
+  --dyn-dock-bg: #171B22;
+  --dyn-dock-surface: #232934;
+  --dyn-shadow-tint: rgba(23, 27, 34, 0.14);
+  --dyn-dark-bg: #12151B;
+  --dyn-dark-surface: #1A1E27;
+  --dyn-dark-raised: #242A36;
+
+  /* === Light Mode Semantic Tokens (Default — 60 / 30 / 10 Tactile Studio Paper) === */
+  --bg: #F6F4EF;
+  --bg-wash: var(--dyn-ambient-light);
+  --surface: #FCFBF8;
+  --surface-raised: #ECEAE3;
+  --surface-hover: #E4E1D9;
+  --surface-active: var(--dyn-accent-soft-light);
+  --sidebar-bg: #F1EFE9;
+
+  --ink: #16171B;
+  --ink-secondary: #44464E;
+  --ink-muted: #5A5C66;
+  --ink-on-dark: #F7F5F0;
+  --ink-on-dark-muted: #C2C5CE;
+
+  --accent: var(--dyn-accent-light);
+  --accent-soft: var(--dyn-accent-soft-light);
+  --accent-ink: #FCFBF8;
+
+  --control-primary-bg: #181A20;
+  --control-primary-ink: #F8F7F4;
+  --control-primary-hover: #282B34;
+
+  --border-subtle: rgba(22, 23, 27, 0.08);
+  --border-control: rgba(22, 23, 27, 0.16);
+  --focus-ring: var(--accent);
+
+  --status-success: #1B6B46;
+  --status-error: #B3261E;
+  --status-warn: #8F5400;
+
+  /* === Floating Dark Mini-Player Dock (Signature Contrast Anchor) === */
+  --dock-bg: var(--dyn-dock-bg);
+  --dock-surface: var(--dyn-dock-surface);
+  --dock-ink: #F7F5F0;
+  --dock-ink-muted: #C1C5CF;
+  --dock-accent: var(--dyn-accent-dark);
+  --dock-border: rgba(255, 255, 255, 0.10);
+
+  /* === Tactile Depth & Shadows (Hue-Tinted, Layered) === */
+  --shadow-card:
+    0 1px 2px rgba(18, 20, 26, 0.05),
+    0 6px 20px -6px var(--dyn-shadow-tint);
+  --shadow-card-hover:
+    0 3px 6px rgba(18, 20, 26, 0.08),
+    0 16px 32px -10px var(--dyn-shadow-tint);
+  --shadow-artwork:
+    0 10px 24px -6px var(--dyn-shadow-tint),
+    0 24px 48px -14px rgba(16, 18, 24, 0.22);
+  --shadow-dock:
+    0 12px 32px -6px rgba(12, 14, 18, 0.34),
+    0 2px 8px rgba(12, 14, 18, 0.16);
+  --shadow-modal:
+    0 24px 64px -12px rgba(12, 14, 18, 0.36),
+    0 4px 16px rgba(12, 14, 18, 0.12);
+
+  /* === Radii === */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 9999px;
+
+  /* === Layout Dimensions === */
+  --sidebar-w: 256px;
+  --drawer-w: 356px;
+  --dock-h: 82px;
+  --mobile-nav-h: 64px;
+  --container-max: 1180px;
+
+  /* === Motion Tokens === */
+  --ease-out-snappy: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-press: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 150ms;
+  --dur-med: 260ms;
+  --dur-chroma: 420ms;
+}
+
+/* === Adaptive Dark Mode (Derived from Playing Cover Art — NEVER crude raw inversion) === */
+[data-theme="dark"] {
+  --bg: var(--dyn-dark-bg);
+  --bg-wash: var(--dyn-ambient-dark);
+  --surface: var(--dyn-dark-surface);
+  --surface-raised: var(--dyn-dark-raised);
+  --surface-hover: rgba(255, 255, 255, 0.08);
+  --surface-active: var(--dyn-accent-soft-dark);
+  --sidebar-bg: color-mix(in srgb, var(--dyn-dark-bg) 82%, #090A0D 18%);
+
+  --ink: #F4F3EE;
+  --ink-secondary: #C8CAD3;
+  --ink-muted: #A3A6B2;
+
+  --accent: var(--dyn-accent-dark);
+  --accent-soft: var(--dyn-accent-soft-dark);
+  --accent-ink: #111318;
+
+  --control-primary-bg: #F4F3EE;
+  --control-primary-ink: #121419;
+  --control-primary-hover: #E3E1DA;
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-control: rgba(255, 255, 255, 0.16);
+  --focus-ring: var(--accent);
+
+  --status-success: #67D39C;
+  --status-error: #F58982;
+  --status-warn: #F0BC68;
+
+  --dock-bg: color-mix(in srgb, var(--dyn-dock-bg) 78%, #07080B 22%);
+  --dock-surface: color-mix(in srgb, var(--dyn-dock-surface) 84%, #181B22 16%);
+  --dock-border: rgba(255, 255, 255, 0.12);
+
+  --shadow-card:
+    0 1px 2px rgba(0, 0, 0, 0.28),
+    0 10px 26px -8px rgba(0, 0, 0, 0.42);
+  --shadow-card-hover:
+    0 4px 10px rgba(0, 0, 0, 0.36),
+    0 18px 36px -10px rgba(0, 0, 0, 0.54);
+  --shadow-artwork:
+    0 14px 32px -6px rgba(0, 0, 0, 0.56),
+    0 24px 54px -16px rgba(0, 0, 0, 0.68);
+  --shadow-dock:
+    0 14px 36px -6px rgba(0, 0, 0, 0.62),
+    0 2px 10px rgba(0, 0, 0, 0.38);
+}

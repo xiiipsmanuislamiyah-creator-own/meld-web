@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="meldPlate" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#23252C" />
+      <stop offset="100%" stop-color="#121317" />
+    </linearGradient>
+    <linearGradient id="meldRim" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22" />
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.04" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.14" />
+    </linearGradient>
+    <linearGradient id="meldAccent" x1="256" y1="146" x2="256" y2="366" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F29F67" />
+      <stop offset="100%" stop-color="#C85D32" />
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="116" fill="url(#meldPlate)" />
+  <rect x="26" y="26" width="460" height="460" rx="114" stroke="url(#meldRim)" stroke-width="4" />
+  <!-- Acoustic M-Wave Sculpted Resonance Bars -->
+  <rect x="116" y="192" width="38" height="152" rx="19" fill="#F6F4EF" />
+  <rect x="176" y="138" width="38" height="236" rx="19" fill="#F6F4EF" />
+  <rect x="237" y="178" width="38" height="176" rx="19" fill="url(#meldAccent)" />
+  <rect x="298" y="138" width="38" height="236" rx="19" fill="#F6F4EF" />
+  <rect x="358" y="192" width="38" height="152" rx="19" fill="#F6F4EF" />
+</svg>

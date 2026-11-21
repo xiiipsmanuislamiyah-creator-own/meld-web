@@ -1,0 +1,202 @@
+// Direct Client-Side YouTube IFrame Audio Engine (Meld Opsi 1 Architecture — Zero VPS Streaming Load)
+// Streams audio directly from Google CDN to user browser with instant seek, volume, and auto-advance.
+
+declare global {
+  interface Window {
+    YT?: {
+      Player: new (
+        el: string | HTMLElement,
+        opts: {
+          height?: string;
+          width?: string;
+          videoId?: string;
+          playerVars?: Record<string, string | number>;
+          events?: {
+            onReady?: (e: { target: YTPlayerInstance }) => void;
+            onStateChange?: (e: { data: number }) => void;
+            onError?: (e: { data: number }) => void;
+          };
+        },
+      ) => YTPlayerInstance;
+      PlayerState: {
+        UNSTARTED: -1;
+        ENDED: 0;
+        PLAYING: 1;
+        PAUSED: 2;
+        BUFFERING: 3;
+        CUED: 5;
+      };
+    };
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+export interface YTPlayerInstance {
+  loadVideoById(videoId: string): void;
+  playVideo(): void;
+  pauseVideo(): void;
+  seekTo(seconds: number, allowSeekAhead?: boolean): void;
+  setVolume(volume: number): void;
+  mute(): void;
+  unMute(): void;
+  getCurrentTime(): number;
+  getDuration(): number;
+  getPlayerState(): number;
+  destroy(): void;
+}
+
+export interface EngineCallbacks {
+  onStateChange: (state: "playing" | "paused" | "buffering" | "ended" | "idle") => void;
+  onProgress: (currentTime: number, duration: number) => void;
+  onError: (code: number) => void;
+}
+
+let apiLoadPromise: Promise<void> | null = null;
+
+function loadYouTubeApi(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.YT?.Player) return Promise.resolve();
+  if (apiLoadPromise) return apiLoadPromise;
+
+  apiLoadPromise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+    const prevReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      prevReady?.();
+      resolve();
+    };
+    if (!existing) {
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      script.async = true;
+      script.onerror = () => reject(new Error("Failed to load YouTube IFrame API"));
+      document.head.appendChild(script);
+    }
+  });
+  return apiLoadPromise;
+}
+
+export class YouTubeAudioEngine {
+  private player: YTPlayerInstance | null = null;
+  private ready = false;
+  private pendingVideoId: string | null = null;
+  private pendingVolume = 85;
+  private pollTimer: number | null = null;
+  private callbacks: EngineCallbacks;
+
+  constructor(callbacks: EngineCallbacks) {
+    this.callbacks = callbacks;
+  }
+
+  async mount(hostElement: HTMLElement): Promise<void> {
+    if (this.player) return;
+    await loadYouTubeApi();
+    if (!window.YT?.Player) return;
+
+    this.player = new window.YT.Player(hostElement, {
+      width: "2",
+      height: "2",
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        iv_load_policy: 3,
+        modestbranding: 1,
+        playsinline: 1,
+        rel: 0,
+        origin: window.location.origin,
+      },
+      events: {
+        onReady: () => {
+          this.ready = true;
+          this.player?.setVolume(this.pendingVolume);
+          if (this.pendingVideoId) {
+            const vid = this.pendingVideoId;
+            this.pendingVideoId = null;
+            this.player?.loadVideoById(vid);
+          }
+          this.startPolling();
+        },
+        onStateChange: (ev) => {
+          const PS = window.YT?.PlayerState;
+          if (!PS) return;
+          if (ev.data === PS.PLAYING) this.callbacks.onStateChange("playing");
+          else if (ev.data === PS.PAUSED) this.callbacks.onStateChange("paused");
+          else if (ev.data === PS.BUFFERING) this.callbacks.onStateChange("buffering");
+          else if (ev.data === PS.ENDED) this.callbacks.onStateChange("ended");
+        },
+        onError: (ev) => {
+          this.callbacks.onError(ev.data);
+        },
+      },
+    });
+  }
+
+  private startPolling(): void {
+    if (this.pollTimer !== null) return;
+    this.pollTimer = window.setInterval(() => {
+      if (!this.player || !this.ready) return;
+      try {
+        const cur = this.player.getCurrentTime() || 0;
+        const dur = this.player.getDuration() || 0;
+        this.callbacks.onProgress(cur, dur);
+      } catch {
+        // ignore transient iframe errors
+      }
+    }, 350);
+  }
+
+  load(videoId: string): void {
+    if (!this.ready || !this.player) {
+      this.pendingVideoId = videoId;
+      return;
+    }
+    this.player.loadVideoById(videoId);
+  }
+
+  play(): void {
+    if (this.ready && this.player) {
+      this.player.playVideo();
+    }
+  }
+
+  pause(): void {
+    if (this.ready && this.player) {
+      this.player.pauseVideo();
+    }
+  }
+
+  seekTo(seconds: number): void {
+    if (this.ready && this.player) {
+      this.player.seekTo(Math.max(0, seconds), true);
+    }
+  }
+
+  setVolume(vol: number): void {
+    this.pendingVolume = Math.max(0, Math.min(100, vol));
+    if (this.ready && this.player) {
+      this.player.setVolume(this.pendingVolume);
+    }
+  }
+
+  setMuted(muted: boolean): void {
+    if (!this.ready || !this.player) return;
+    if (muted) this.player.mute();
+    else this.player.unMute();
+  }
+
+  destroy(): void {
+    if (this.pollTimer !== null) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    try {
+      this.player?.destroy();
+    } catch {
+      // noop
+    }
+    this.player = null;
+    this.ready = false;
+  }
+}
