@@ -2787,11 +2787,6 @@ img {
     display: none;
   }
 
-  .np-stage {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 24px;
-  }
-
   .np-side-panel {
     height: 360px;
   }
