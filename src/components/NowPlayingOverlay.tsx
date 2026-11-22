@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowClockwise,
   ArrowCounterClockwise,
@@ -16,24 +16,21 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
-  SpeakerHigh,
-  SpeakerSlash,
 } from "@phosphor-icons/react";
 import type { Track } from "../types/music";
-import { usePlayer, type DrawerTab } from "../context/PlayerContext";
+import { usePlayer } from "../context/PlayerContext";
 import { useLibrary } from "../context/LibraryContext";
 import { useSettings } from "../context/SettingsContext";
 import { useToast } from "../context/ToastContext";
 import { Artwork } from "./Artwork";
 import { WaveformScrubber } from "./WaveformScrubber";
-import { StudioDrawer } from "./StudioDrawer";
+import { NowPlayingLyrics } from "./NowPlayingLyrics";
+import { LyricsShareModal } from "./LyricsShareModal";
 import { QuickSettingsModal } from "./QuickSettingsModal";
 
 interface NowPlayingOverlayProps {
   onAddToPlaylist: (track: Track) => void;
 }
-
-const SPEED_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
   const {
@@ -41,11 +38,10 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
     playbackState,
     currentTime,
     duration,
-    volume,
-    muted,
     shuffle,
     repeat,
-    playbackRate,
+    lyrics,
+    lyricsLoading,
     nowPlayingOpen,
     videoStageOpen,
     setNowPlayingOpen,
@@ -53,21 +49,18 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
     nextTrack,
     prevTrack,
     seekTo,
-    setVolume,
-    toggleMute,
     toggleShuffle,
     cycleRepeat,
-    setPlaybackRate,
     startRadioFromTrack,
   } = usePlayer();
 
   const { isLiked, toggleLike } = useLibrary();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const { notify } = useToast();
 
-  const [sideTab, setSideTab] = useState<DrawerTab>("lyrics");
-  const [mobileView, setMobileView] = useState<"playing" | DrawerTab>("playing");
+  const [mobileView, setMobileView] = useState<"playing" | "lyrics">("playing");
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
+  const [shareLyricsOpen, setShareLyricsOpen] = useState(false);
   const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
@@ -79,26 +72,19 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [nowPlayingOpen, setNowPlayingOpen]);
 
-  if (!nowPlayingOpen || !currentTrack) return null;
-
   const isPlaying = playbackState === "playing";
   const isBuffering = playbackState === "buffering";
-  const liked = isLiked(currentTrack.id);
+  const liked = currentTrack ? isLiked(currentTrack.id) : false;
   const skipSec = settings.skipSeconds || 10;
 
   const handleShare = () => {
+    if (!currentTrack) return;
     const shareUrl = currentTrack.videoId
       ? `https://music.youtube.com/watch?v=${currentTrack.videoId}`
       : window.location.href;
     navigator.clipboard?.writeText(shareUrl).then(() => {
-      notify("Track link copied to clipboard", "success");
+      notify("Tautan lagu disalin ke clipboard", "success");
     });
-  };
-
-  const handleCycleSpeed = () => {
-    const idx = SPEED_STEPS.indexOf(playbackRate);
-    const next = SPEED_STEPS[(idx + 1) % SPEED_STEPS.length];
-    setPlaybackRate(next);
   };
 
   const handleSwipeStart = (e: React.TouchEvent) => {
@@ -108,13 +94,42 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
 
   const handleSwipeEnd = (e: React.TouchEvent) => {
     if (!settings.swipeToChangeTrack || touchStartX.current === null) return;
-    const endX = e.changedTouches[0]?.clientX ?? touchStartX.current;
+    const endX = e.changedTouches[0]?.clientX ?? 0;
     const delta = endX - touchStartX.current;
     touchStartX.current = null;
     if (Math.abs(delta) < 60) return;
     if (delta < 0) void nextTrack();
     else void prevTrack();
   };
+
+  const lyricLinesForShare = useMemo(() => {
+    if (!lyrics?.found) return [];
+    if (lyrics.synced && lyrics.lines && lyrics.lines.length > 0) {
+      return lyrics.lines.map((l) => l.text);
+    }
+    if (lyrics.plainText) {
+      return lyrics.plainText
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }, [lyrics]);
+
+  const handleCopyLyrics = () => {
+    const text = lyrics?.plainText || lyrics?.lines?.map((l) => l.text).join("\n");
+    if (!text) return;
+    navigator.clipboard?.writeText(text).then(() => {
+      notify("Lirik disalin ke clipboard", "success");
+    });
+  };
+
+  const shiftLyricsOffset = (deltaMs: number) => {
+    const next = Math.max(-2000, Math.min(2000, settings.lyricsOffsetMs + deltaMs));
+    updateSettings({ lyricsOffsetMs: next });
+  };
+
+  if (!nowPlayingOpen || !currentTrack) return null;
 
   return (
     <div
@@ -123,12 +138,14 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
       aria-modal="true"
       aria-label={`Now Playing: ${currentTrack.title}`}
     >
+      {/* Top Header Strip */}
       <div className="np-topbar">
         <button
           type="button"
           className="icon-btn icon-btn-surface"
           onClick={() => setNowPlayingOpen(false)}
-          aria-label="Collapse now playing"
+          aria-label="Tutup now playing"
+          title="Tutup"
         >
           <CaretDown size={20} weight="bold" />
         </button>
@@ -155,7 +172,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
             <ShareNetwork size={18} />
           </button>
 
-          {/* 3-Lines (Hamburger/Menu) Button replacing sun/palette/video/timer with unified Settings */}
+          {/* 3-Lines (≡) Button opening Unified Settings (Controls, Queue, Palette, Volume) */}
           <button
             type="button"
             className={`icon-btn icon-btn-surface${quickSettingsOpen ? " is-active" : ""}`}
@@ -168,32 +185,30 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
         </div>
       </div>
 
-      {/* Mobile Segmented Switcher (Playing | Lyrics | Queue) */}
-      <div className="np-mobile-tabs" role="tablist" aria-label="Now Playing views">
-        {(
-          [
-            { id: "playing", label: "Playing" },
-            { id: "lyrics", label: "Lyrics" },
-            { id: "queue", label: "Queue" },
-          ] as const
-        ).map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={mobileView === tab.id}
-            className={`drawer-tab${mobileView === tab.id ? " is-active" : ""}`}
-            onClick={() => {
-              setMobileView(tab.id);
-              if (tab.id !== "playing") setSideTab(tab.id);
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Mobile 2-Segment Switcher: Lagu (Playing) | Lirik (Lyrics) - NO Queue here! */}
+      <div className="np-mobile-tabs" role="tablist" aria-label="Tampilan pemutar">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobileView === "playing"}
+          className={`drawer-tab${mobileView === "playing" ? " is-active" : ""}`}
+          onClick={() => setMobileView("playing")}
+        >
+          Lagu
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobileView === "lyrics"}
+          className={`drawer-tab${mobileView === "lyrics" ? " is-active" : ""}`}
+          onClick={() => setMobileView("lyrics")}
+        >
+          Lirik
+        </button>
       </div>
 
-      <div className={`np-stage${mobileView !== "playing" ? " np-mobile-show-side" : ""}`}>
+      {/* Main Stage: Deck (Left) & Full Lyrics (Right on Desktop, or Toggled on Mobile) */}
+      <div className={`np-stage${mobileView === "lyrics" ? " show-lyrics" : ""}`}>
         {/* Left: Tactile Player Deck */}
         <div className="np-deck">
           {videoStageOpen ? (
@@ -224,7 +239,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
               onClick={() => {
                 const added = toggleLike(currentTrack);
                 notify(
-                  added ? `Saved "${currentTrack.title}" to Liked Songs` : `Removed from Liked Songs`,
+                  added ? `Disimpan ke Lagu Disukai` : `Dihapus dari Lagu Disukai`,
                   "info",
                 );
               }}
@@ -243,6 +258,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
               className="icon-btn"
               onClick={() => onAddToPlaylist(currentTrack)}
               aria-label="Add track to playlist"
+              title="Tambah ke Playlist"
             >
               <Playlist size={22} />
             </button>
@@ -272,7 +288,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
               type="button"
               className="icon-btn"
               onClick={() => seekTo(Math.max(0, currentTime - skipSec))}
-              aria-label={`Rewind ${skipSec} seconds`}
+              aria-label={`Mundur ${skipSec} detik`}
               title={`-${skipSec}s`}
             >
               <ArrowCounterClockwise size={20} />
@@ -282,7 +298,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
               type="button"
               className="icon-btn"
               onClick={() => void prevTrack()}
-              aria-label="Previous track"
+              aria-label="Lagu sebelumnya"
             >
               <SkipBack size={25} weight="fill" />
             </button>
@@ -291,7 +307,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
               type="button"
               className="np-play-hero"
               onClick={togglePlayPause}
-              aria-label={isPlaying ? "Pause playback" : "Resume playback"}
+              aria-label={isPlaying ? "Jeda pemutaran" : "Lanjutkan pemutaran"}
             >
               {isBuffering ? (
                 <CircleNotch size={28} weight="bold" style={{ animation: "spin 0.8s linear infinite" }} />
@@ -306,7 +322,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
               type="button"
               className="icon-btn"
               onClick={() => void nextTrack()}
-              aria-label="Next track"
+              aria-label="Lagu selanjutnya"
             >
               <SkipForward size={25} weight="fill" />
             </button>
@@ -315,7 +331,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
               type="button"
               className="icon-btn"
               onClick={() => seekTo(currentTime + skipSec)}
-              aria-label={`Forward ${skipSec} seconds`}
+              aria-label={`Maju ${skipSec} detik`}
               title={`+${skipSec}s`}
             >
               <ArrowClockwise size={20} />
@@ -325,7 +341,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
               type="button"
               className={`icon-btn${repeat !== "off" ? " is-active" : ""}`}
               onClick={cycleRepeat}
-              aria-label={`Repeat mode ${repeat}`}
+              aria-label={`Mode ulang: ${repeat}`}
             >
               {repeat === "one" ? (
                 <RepeatOnce size={21} weight="bold" />
@@ -333,71 +349,53 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
                 <Repeat size={21} weight={repeat === "all" ? "bold" : "regular"} />
               )}
             </button>
-          </div>
 
-          {/* Volume + Quick Utility Strip */}
-          <div className="np-utility-bar">
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 130 }}>
-              <button
-                type="button"
-                className="icon-btn"
-                style={{ width: 34, height: 34 }}
-                onClick={toggleMute}
-                aria-label={muted || volume === 0 ? "Unmute" : "Mute"}
-              >
-                {muted || volume === 0 ? <SpeakerSlash size={17} /> : <SpeakerHigh size={17} />}
-              </button>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={muted ? 0 : volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                aria-label="Volume"
-                style={{ flex: 1, accentColor: "var(--accent)", cursor: "pointer" }}
-              />
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ minHeight: 36, padding: "0 12px", fontSize: "0.78rem" }}
-                onClick={() => void startRadioFromTrack(currentTrack)}
-              >
-                <Radio size={15} /> Radio
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ minHeight: 36, padding: "0 12px", fontSize: "0.78rem", fontFamily: "var(--font-mono)" }}
-                onClick={handleCycleSpeed}
-                aria-label="Cycle playback speed"
-              >
-                {playbackRate}x
-              </button>
-            </div>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => void startRadioFromTrack(currentTrack)}
+              title="Mulai Radio Mix"
+              aria-label="Mulai Radio Mix"
+            >
+              <Radio size={20} />
+            </button>
           </div>
         </div>
 
-        {/* Right: Embedded Synced Lyrics / Queue / Palette Inspector */}
-        <StudioDrawer
-          embedded
-          activeTabOverride={sideTab}
-          onTabChangeOverride={(t) => {
-            setSideTab(t);
-            setMobileView(t);
-          }}
+        {/* Right / Tabbed View: Full Synced Lyrics Panel */}
+        <NowPlayingLyrics
+          currentTrack={currentTrack}
+          lyrics={lyrics}
+          lyricsLoading={lyricsLoading}
+          currentTime={currentTime}
+          playbackState={playbackState}
+          lyricsFontSize={settings.lyricsFontSize}
+          lyricsAlign={settings.lyricsAlign}
+          lyricsAutoScroll={settings.lyricsAutoScroll}
+          lyricsProgressiveBlur={settings.lyricsProgressiveBlur}
+          lyricsOffsetMs={settings.lyricsOffsetMs}
+          onShiftOffset={shiftLyricsOffset}
+          onSeek={seekTo}
+          onOpenShareModal={() => setShareLyricsOpen(true)}
+          onCopyLyrics={handleCopyLyrics}
         />
       </div>
 
+      {/* Share Lyrics Modal */}
+      {currentTrack && (
+        <LyricsShareModal
+          open={shareLyricsOpen}
+          onClose={() => setShareLyricsOpen(false)}
+          track={currentTrack}
+          lines={lyricLinesForShare}
+          initialIndex={0}
+        />
+      )}
+
+      {/* Unified Settings & Controls Modal (Controls, Queue, Palette, Volume) */}
       <QuickSettingsModal
         open={quickSettingsOpen}
         onClose={() => setQuickSettingsOpen(false)}
-        onOpenQueue={() => {
-          setSideTab("queue");
-          setMobileView("queue");
-        }}
       />
     </div>
   );

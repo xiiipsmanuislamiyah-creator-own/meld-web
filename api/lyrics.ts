@@ -28,8 +28,10 @@ function parseLrc(lrc: string): LyricLine[] {
 
 function cleanTrackTitle(title: string): string {
   return title
-    .replace(/\s*\((official|lyric|audio|video|remaster|feat\.?|ft\.?)[^)]*\)/gi, "")
+    .replace(/\s*\([^)]*(remake|quality|bass|slowed|reverb|tiktok|version|edit|mix|bootleg|official|lyric|audio|video|remaster|feat\.?|ft\.?)[^)]*\)/gi, "")
     .replace(/\s*\[[^\]]*\]/g, "")
+    .replace(/^DJ\s+/i, "")
+    .replace(/\s*-\s*(remake|remix|bootleg|slowed|reverb|tiktok|official|bass).*$/gi, "")
     .trim();
 }
 
@@ -110,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const headers = { "User-Agent": "MeldWeb/1.0 (https://github.com/xiiipsmanuislamiyah-creator-own/meld-web)" };
 
-    // 1. Exact LRCLIB lookup
+    // 1. Exact LRCLIB lookup with cleaned title & primary artist
     const exactParams = new URLSearchParams({
       track_name: cleanedTitle,
       artist_name: primaryArtist,
@@ -138,26 +140,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 2. Fallback LRCLIB search lookup
-    const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(`${cleanedTitle} ${primaryArtist}`)}`;
-    const searchRes = await fetch(searchUrl, { headers });
-    if (searchRes.ok) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const list: any[] = await searchRes.json();
-      if (Array.isArray(list) && list.length > 0) {
-        const best = list.find((x) => Boolean(x?.syncedLyrics)) || list[0];
-        const syncedLines = best?.syncedLyrics ? parseLrc(best.syncedLyrics) : [];
-        if (syncedLines.length || best?.plainLyrics) {
-          const payload: LyricsPayload = {
-            found: true,
-            synced: syncedLines.length > 0,
-            trackName: best?.trackName,
-            artistName: best?.artistName,
-            lines: syncedLines,
-            plainText: best?.plainLyrics || syncedLines.map((l) => l.text).join("\n"),
-            source: "lrclib",
-          };
-          return res.status(200).json(payload);
+    // 2. Build prioritized search queries for LRCLIB fallback
+    const queriesToTry: string[] = [];
+    if (primaryArtist && !primaryArtist.match(/^(yt\s|official|topic|top|dj\s)/i)) {
+      queriesToTry.push(`${cleanedTitle} ${primaryArtist}`);
+    }
+    queriesToTry.push(cleanedTitle);
+
+    // If mashup or dual title ("A x B" or "A X B")
+    if (cleanedTitle.match(/\s+x\s+/i)) {
+      const parts = cleanedTitle.split(/\s+x\s+/i).map((p) => p.trim()).filter(Boolean);
+      for (const part of parts) {
+        if (part.length > 2) queriesToTry.push(part);
+      }
+    }
+
+    // If "Artist - Title" format
+    if (cleanedTitle.includes(" - ")) {
+      const parts = cleanedTitle.split(" - ").map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 2) {
+        queriesToTry.push(`${parts[1]} ${parts[0]}`);
+        queriesToTry.push(parts[1]);
+      }
+    }
+
+    for (const q of queriesToTry) {
+      const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(q)}`;
+      const searchRes = await fetch(searchUrl, { headers });
+      if (searchRes.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const list: any[] = await searchRes.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const best = list.find((x) => Boolean(x?.syncedLyrics)) || list[0];
+          const syncedLines = best?.syncedLyrics ? parseLrc(best.syncedLyrics) : [];
+          if (syncedLines.length || best?.plainLyrics) {
+            const payload: LyricsPayload = {
+              found: true,
+              synced: syncedLines.length > 0,
+              trackName: best?.trackName,
+              artistName: best?.artistName,
+              lines: syncedLines,
+              plainText: best?.plainLyrics || syncedLines.map((l) => l.text).join("\n"),
+              source: "lrclib",
+            };
+            return res.status(200).json(payload);
+          }
         }
       }
     }

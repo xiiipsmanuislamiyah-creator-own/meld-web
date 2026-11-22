@@ -1372,6 +1372,18 @@ img {
   align-items: center;
 }
 
+.np-lyrics-container {
+  display: flex;
+  flex-direction: column;
+  height: min(600px, 75svh);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: 16px 20px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
 .np-deck {
   display: flex;
   flex-direction: column;
@@ -2492,32 +2504,45 @@ img {
 
   .np-mobile-tabs {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 4px;
     padding: 4px;
     border-radius: var(--radius-pill);
     background: var(--surface-raised);
     width: 100%;
-    max-width: 420px;
-    margin: 0 auto 14px;
+    max-width: 260px;
+    margin: 0 auto 16px;
   }
 
-  .np-stage .np-side-panel {
-    display: none;
-  }
-
-  .np-stage.np-mobile-show-side .np-deck {
-    display: none;
-  }
-
-  .np-stage.np-mobile-show-side .np-side-panel {
+  .np-stage {
     display: flex;
-    height: min(560px, 68svh);
+    flex-direction: column;
+    width: 100%;
+    margin: 0 auto;
+    gap: 0;
   }
 
-  .np-stage.np-mobile-show-side .np-side-panel > div:first-child,
-  .np-stage.np-mobile-show-side .np-side-panel .drawer-tabs {
+  .np-stage .np-deck {
+    display: flex;
+    width: 100%;
+  }
+
+  .np-stage.show-lyrics .np-deck {
+    display: none !important;
+  }
+
+  .np-stage .np-lyrics-container {
     display: none;
+    width: 100%;
+    height: calc(100svh - 170px);
+    border: none;
+    background: transparent;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .np-stage.show-lyrics .np-lyrics-container {
+    display: flex !important;
   }
   .app-shell,
   .app-shell.has-drawer {

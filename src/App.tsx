@@ -54,7 +54,7 @@ function MeldWorkspace() {
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
 
-  const { drawerOpen, setDrawerOpen, setDrawerTab } = usePlayer();
+  const { drawerOpen, setDrawerOpen } = usePlayer();
 
   const navigateTab = (tab: NavTab) => {
     setActiveTab(tab);
@@ -264,10 +264,6 @@ function MeldWorkspace() {
       <QuickSettingsModal
         open={quickSettingsOpen}
         onClose={() => setQuickSettingsOpen(false)}
-        onOpenQueue={() => {
-          setDrawerTab("queue");
-          setDrawerOpen(true);
-        }}
       />
     </div>
   );
