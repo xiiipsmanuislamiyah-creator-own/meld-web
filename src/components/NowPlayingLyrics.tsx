@@ -154,7 +154,7 @@ export function NowPlayingLyrics({
   }
 
   return (
-    <div className="np-lyrics-container" style={{ position: "relative", display: "flex", flexDirection: "column", height: "100%", width: "100%" }}>
+    <div className="np-lyrics-container" style={{ position: "relative", width: "100%" }}>
       {/* Top Utility Bar for Lyrics */}
       <div
         style={{
