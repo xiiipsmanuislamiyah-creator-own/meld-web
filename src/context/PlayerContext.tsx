@@ -111,6 +111,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const engineRef = useRef<YouTubeAudioEngine | null>(null);
   const pipRef = useRef<BackgroundPipController | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
 
   const stateRef = useRef({
     queue,
@@ -307,6 +309,60 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     engineRef.current?.setPlaybackRate(settings.playbackRate);
   }, [settings.playbackRate]);
+
+  // Silent background audio keep-alive (prevents browser/mobile sleeping or stopping audio on tab exit)
+  useEffect(() => {
+    try {
+      const audio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+      audio.loop = true;
+      audio.volume = 0.001;
+      silentAudioRef.current = audio;
+    } catch (_) {}
+
+    return () => {
+      silentAudioRef.current?.pause();
+      silentAudioRef.current = null;
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+    };
+  }, []);
+
+  // Sync silent audio loop and WakeLock with playbackState + Background tab visibility resilience
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (stateRef.current.playbackState === "playing") {
+        silentAudioRef.current?.play().catch(() => {});
+        if (document.visibilityState === "visible" && "wakeLock" in navigator && !wakeLockRef.current) {
+          (navigator as any).wakeLock?.request("screen").then((wl: any) => {
+            wakeLockRef.current = wl;
+          }).catch(() => {});
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    if (playbackState === "playing") {
+      silentAudioRef.current?.play().catch(() => {});
+      if ("wakeLock" in navigator && !wakeLockRef.current) {
+        (navigator as any).wakeLock?.request("screen").then((wl: any) => {
+          wakeLockRef.current = wl;
+        }).catch(() => {});
+      }
+    } else {
+      silentAudioRef.current?.pause();
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+    }
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [playbackState]);
 
   // PiP controller lifecycle & live updates
   useEffect(() => {

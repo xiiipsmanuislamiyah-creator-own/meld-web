@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
+  CircleNotch,
   Copy,
   ImageSquare,
+  Lightning,
+  ListPlus,
   MagnifyingGlass,
   MicrophoneStage,
   Minus,
   Moon,
   Palette,
+  Play,
   Plus,
   Queue,
   Shuffle,
+  Sparkle,
   Sun,
   Timer,
   Trash,
@@ -25,6 +31,8 @@ import { Artwork } from "./Artwork";
 import { EqualizerBars } from "./EqualizerBars";
 import { LyricsShareModal } from "./LyricsShareModal";
 import { formatTime } from "../lib/waveform";
+import { fetchUpNextRadio, searchCatalog } from "../lib/api";
+import type { Track } from "../types/music";
 
 interface StudioDrawerProps {
   embedded?: boolean;
@@ -56,6 +64,7 @@ export function StudioDrawer({
     moveQueueItem,
     clearUpNextQueue,
     shuffleUpNextQueue,
+    addToQueue,
     setSleepTimerMinutes,
     setSleepTimerEndOfTrack,
   } = usePlayer();
@@ -66,11 +75,17 @@ export function StudioDrawer({
 
   const [queueFilter, setQueueFilter] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
+  const [candidateTracks, setCandidateTracks] = useState<Track[]>([]);
+  const [candidateLoading, setCandidateLoading] = useState(false);
+  const [catalogResults, setCatalogResults] = useState<Track[]>([]);
+  const [catalogSearching, setCatalogSearching] = useState(false);
+  const [scrolledAway, setScrolledAway] = useState(false);
 
   const activeTab = activeTabOverride ?? drawerTab;
   const setTab = onTabChangeOverride ?? setDrawerTab;
 
   const activeLyricRef = useRef<HTMLButtonElement | null>(null);
+  const lyricsScrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const offsetSeconds = settings.lyricsOffsetMs / 1000;
   const effectiveTime = currentTime + offsetSeconds;
@@ -80,6 +95,66 @@ export function StudioDrawer({
       ? lyrics.lines.reduce((acc, line, idx) => (line.time <= effectiveTime + 0.35 ? idx : acc), -1)
       : -1;
 
+  // Auto-fetch Candidate Tracks (Rekomendasi Kandidat Selanjutnya)
+  useEffect(() => {
+    if (!currentTrack) {
+      setCandidateTracks([]);
+      return;
+    }
+    let cancelled = false;
+    setCandidateLoading(true);
+
+    const loadCandidates = async () => {
+      try {
+        let recs: Track[] = [];
+        if (currentTrack.videoId) {
+          const res = await fetchUpNextRadio(currentTrack.videoId);
+          recs = res.tracks || [];
+        }
+        if (recs.length === 0) {
+          const searchRes = await searchCatalog(`${currentTrack.artist} ${currentTrack.title}`, "songs");
+          recs = searchRes.tracks || [];
+        }
+        if (!cancelled) {
+          const queueIds = new Set(queue.map((t) => t.id));
+          const filtered = recs.filter((t) => t.id !== currentTrack.id && !queueIds.has(t.id));
+          setCandidateTracks(filtered.slice(0, 6));
+        }
+      } catch {
+        if (!cancelled) setCandidateTracks([]);
+      } finally {
+        if (!cancelled) setCandidateLoading(false);
+      }
+    };
+
+    void loadCandidates();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack?.id, currentTrack?.videoId, currentTrack?.artist, currentTrack?.title, queue.length]);
+
+  // Online Catalog Search for Queue when user types in search box
+  useEffect(() => {
+    const q = queueFilter.trim();
+    if (activeTab !== "queue" || q.length < 1) {
+      setCatalogResults([]);
+      setCatalogSearching(false);
+      return;
+    }
+
+    setCatalogSearching(true);
+    const timer = window.setTimeout(() => {
+      searchCatalog(q, "songs")
+        .then((res) => {
+          setCatalogResults(res.tracks.slice(0, 8));
+        })
+        .catch(() => setCatalogResults([]))
+        .finally(() => setCatalogSearching(false));
+    }, 160);
+
+    return () => clearTimeout(timer);
+  }, [queueFilter, activeTab]);
+
   useEffect(() => {
     if (activeTab === "lyrics" && settings.lyricsAutoScroll && activeLyricRef.current) {
       const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -87,8 +162,22 @@ export function StudioDrawer({
         block: "center",
         behavior: prefersReduced ? "auto" : "smooth",
       });
+      setScrolledAway(false);
     }
   }, [activeLyricIndex, activeTab, settings.lyricsAutoScroll]);
+
+  // Detect manual user scrolling on lyrics container
+  const handleLyricsScroll = () => {
+    if (!activeLyricRef.current || !lyricsScrollContainerRef.current) return;
+    const container = lyricsScrollContainerRef.current;
+    const activeEl = activeLyricRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const activeRect = activeEl.getBoundingClientRect();
+    const isOutOfCenter =
+      activeRect.bottom < containerRect.top + 50 ||
+      activeRect.top > containerRect.bottom - 50;
+    setScrolledAway(isOutOfCenter);
+  };
 
   const filteredQueueEntries = useMemo(() => {
     const q = queueFilter.trim().toLowerCase();
@@ -198,8 +287,8 @@ export function StudioDrawer({
                 <div className="skeleton-box" style={{ height: 22, width: "64%" }} />
               </div>
             ) : lyrics?.found && lyrics.synced ? (
-              <>
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "0 4px 6px" }}>
+              <div style={{ position: "relative", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "0 4px 8px" }}>
                   <span style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)" }}>
                     Synced via {lyrics.source === "ytmusic" ? "YTMusic" : "LRCLIB"}
                   </span>
@@ -264,39 +353,99 @@ export function StudioDrawer({
                   </div>
                 </div>
 
-                {lyrics.lines.map((line, i) => {
-                  const isCurrent = i === activeLyricIndex;
-                  const distance = activeLyricIndex >= 0 ? Math.abs(i - activeLyricIndex) : 0;
-                  const blurPx =
-                    settings.lyricsProgressiveBlur && activeLyricIndex >= 0 && !isCurrent
-                      ? Math.min(2.2, distance * 0.45)
-                      : 0;
-                  const opacity =
-                    activeLyricIndex >= 0 && !isCurrent
-                      ? Math.max(0.36, 1 - distance * 0.14)
-                      : 1;
+                {/* Lyrics Lines with Rhythm Synchronization & Karaoke Sweep */}
+                <div
+                  ref={lyricsScrollContainerRef}
+                  onScroll={handleLyricsScroll}
+                  className="lyrics-lines-container"
+                  style={{
+                    overflowY: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    padding: "4px 2px 24px",
+                  }}
+                >
+                  {lyrics.lines.map((line, i) => {
+                    const isCurrent = i === activeLyricIndex;
+                    const distance = activeLyricIndex >= 0 ? Math.abs(i - activeLyricIndex) : 0;
+                    const blurPx =
+                      settings.lyricsProgressiveBlur && activeLyricIndex >= 0 && !isCurrent
+                        ? Math.min(2.4, distance * 0.45)
+                        : 0;
+                    const opacity =
+                      activeLyricIndex >= 0 && !isCurrent
+                        ? Math.max(0.34, 1 - distance * 0.14)
+                        : 1;
 
-                  return (
-                    <button
-                      key={`${line.time}-${i}`}
-                      ref={isCurrent ? activeLyricRef : null}
-                      type="button"
-                      className={`lyric-line${isCurrent ? " is-current" : ""}`}
-                      style={{
-                        fontSize: isCurrent
-                          ? `${settings.lyricsFontSize + 2}px`
-                          : `${settings.lyricsFontSize}px`,
-                        textAlign: settings.lyricsAlign,
-                        filter: blurPx > 0 ? `blur(${blurPx.toFixed(2)}px)` : undefined,
-                        opacity,
-                      }}
-                      onClick={() => seekTo(Math.max(0, line.time - offsetSeconds))}
-                    >
-                      {line.text}
-                    </button>
-                  );
-                })}
-              </>
+                    // Modern rhythm sweep percent calculation
+                    let sweepPct = 0;
+                    if (isCurrent) {
+                      const lineStart = line.time;
+                      const lineEnd = lyrics.lines[i + 1]?.time ?? (lineStart + 3.8);
+                      const dur = Math.max(0.5, lineEnd - lineStart);
+                      const progress = Math.max(0, Math.min(1, (effectiveTime - lineStart) / dur));
+                      sweepPct = Math.round(progress * 100);
+                    }
+
+                    return (
+                      <button
+                        key={`${line.time}-${i}`}
+                        ref={isCurrent ? activeLyricRef : null}
+                        type="button"
+                        className={`lyric-line${isCurrent ? " is-current" : ""}`}
+                        style={{
+                          fontSize: isCurrent
+                            ? `${settings.lyricsFontSize + 3}px`
+                            : `${settings.lyricsFontSize}px`,
+                          textAlign: settings.lyricsAlign,
+                          filter: blurPx > 0 ? `blur(${blurPx.toFixed(2)}px)` : undefined,
+                          opacity,
+                        }}
+                        onClick={() => seekTo(Math.max(0, line.time - offsetSeconds))}
+                      >
+                        <div className="lyric-line-content">
+                          {isCurrent && (
+                            <div className="lyric-rhythm-badge" title="Rhythm Active">
+                              <EqualizerBars paused={playbackState !== "playing"} />
+                            </div>
+                          )}
+                          <div className="lyric-text-wrapper">
+                            <span className="lyric-text-base">{line.text}</span>
+                            {isCurrent && (
+                              <span
+                                className="lyric-text-fill"
+                                style={{ width: `${sweepPct}%` }}
+                              >
+                                {line.text}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Floating Re-Sync Button if User Scrolled Away */}
+                {scrolledAway && activeLyricIndex >= 0 && (
+                  <button
+                    type="button"
+                    className="lyric-sync-btn"
+                    onClick={() => {
+                      activeLyricRef.current?.scrollIntoView({
+                        block: "center",
+                        behavior: "smooth",
+                      });
+                      setScrolledAway(false);
+                    }}
+                    aria-label="Kembali ke lirik aktif"
+                  >
+                    <Lightning size={14} weight="fill" />
+                    <span>Sinkron Lirik</span>
+                  </button>
+                )}
+              </div>
             ) : lyrics?.found && lyrics.plainText ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
@@ -349,148 +498,364 @@ export function StudioDrawer({
         )}
 
         {activeTab === "queue" && (
-          <>
-            {queue.length === 0 ? (
-              <div className="state-panel" style={{ padding: "28px 16px" }}>
-                <Queue size={28} weight="duotone" style={{ color: "var(--ink-muted)" }} />
-                <p style={{ fontWeight: 600 }}>Queue is empty</p>
-                <p style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)" }}>
-                  Playing any track builds a continuous Up Next radio queue automatically.
-                </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Search Input for Queue: Instant Filter + Catalog Search */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ position: "relative", flex: 1 }}>
+                <MagnifyingGlass
+                  size={14}
+                  style={{
+                    position: "absolute",
+                    left: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "var(--ink-muted)",
+                    pointerEvents: "none",
+                  }}
+                />
+                <input
+                  type="search"
+                  className="field-input"
+                  style={{ minHeight: 36, paddingLeft: 30, paddingRight: 28, fontSize: "0.82rem", borderRadius: "var(--radius-pill)" }}
+                  value={queueFilter}
+                  onChange={(e) => setQueueFilter(e.target.value)}
+                  placeholder="Cari lagu untuk antrean / filter..."
+                  aria-label="Cari dan filter lagu antrean"
+                />
+                {queueFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setQueueFilter("")}
+                    style={{
+                      position: "absolute",
+                      right: 8,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "transparent",
+                      border: "none",
+                      color: "var(--ink-muted)",
+                      cursor: "pointer",
+                      padding: 2,
+                    }}
+                    aria-label="Clear filter"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {/* Queue Filter + Quick Actions */}
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <div style={{ position: "relative", flex: 1 }}>
-                    <MagnifyingGlass
-                      size={14}
-                      style={{
-                        position: "absolute",
-                        left: 10,
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        color: "var(--ink-muted)",
-                        pointerEvents: "none",
-                      }}
-                    />
-                    <input
-                      type="search"
-                      className="field-input"
-                      style={{ minHeight: 36, paddingLeft: 30, fontSize: "0.82rem", borderRadius: "var(--radius-pill)" }}
-                      value={queueFilter}
-                      onChange={(e) => setQueueFilter(e.target.value)}
-                      placeholder="Filter queue..."
-                      aria-label="Filter queue tracks"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    style={{ width: 34, height: 34 }}
-                    onClick={shuffleUpNextQueue}
-                    title="Shuffle Up Next"
-                    aria-label="Shuffle upcoming queue"
-                    disabled={queue.length <= 2}
-                  >
-                    <Shuffle size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    style={{ width: 34, height: 34 }}
-                    onClick={clearUpNextQueue}
-                    title="Clear Up Next"
-                    aria-label="Clear upcoming queue"
-                    disabled={queue.length <= 1}
-                  >
-                    <Trash size={15} />
-                  </button>
-                </div>
+              <button
+                type="button"
+                className="icon-btn"
+                style={{ width: 34, height: 34 }}
+                onClick={shuffleUpNextQueue}
+                title="Shuffle Up Next"
+                aria-label="Shuffle upcoming queue"
+                disabled={queue.length <= 2}
+              >
+                <Shuffle size={15} />
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                style={{ width: 34, height: 34 }}
+                onClick={clearUpNextQueue}
+                title="Clear Up Next"
+                aria-label="Clear upcoming queue"
+                disabled={queue.length <= 1}
+              >
+                <Trash size={15} />
+              </button>
+            </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {filteredQueueEntries.map(({ item, idx }) => {
-                    const isCurrent = idx === queueIndex;
-                    return (
+            {/* If searching: Show Catalog Results to Add Next / Add to Queue */}
+            {queueFilter.trim().length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* 1. Matches from existing queue */}
+                {filteredQueueEntries.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      Dalam Antrean Saat Ini ({filteredQueueEntries.length})
+                    </span>
+                    {filteredQueueEntries.map(({ item, idx }) => {
+                      const isCurrent = idx === queueIndex;
+                      return (
+                        <div
+                          key={`match-${item.id}-${idx}`}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "36px minmax(0, 1fr) auto",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 8px",
+                            borderRadius: "var(--radius-sm)",
+                            background: isCurrent ? "var(--surface-active)" : "var(--surface-raised)",
+                          }}
+                        >
+                          <Artwork src={item.artwork} alt="" className="track-thumb-img" size={72} />
+                          <div style={{ minWidth: 0 }}>
+                            <div className="track-title" style={{ fontSize: "0.82rem", color: isCurrent ? "var(--accent)" : "var(--ink)" }}>{item.title}</div>
+                            <div className="track-artist" style={{ fontSize: "0.72rem" }}>{item.artist}</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ height: 28, fontSize: "0.72rem", padding: "0 8px" }}
+                            onClick={() => void playTrack(item, queue, idx)}
+                          >
+                            Putar
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 2. Online Catalog Search Results to Add Next / Queue */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      Katalog Musik (Pilih untuk Lanjutkan)
+                    </span>
+                    {catalogSearching && (
+                      <CircleNotch size={14} weight="bold" style={{ animation: "spin 0.8s linear infinite", color: "var(--accent)" }} />
+                    )}
+                  </div>
+
+                  {catalogResults.length === 0 && !catalogSearching ? (
+                    <p style={{ fontSize: "0.78rem", color: "var(--ink-muted)", margin: "4px 0" }}>
+                      Ketik judul lagu atau artis untuk mencari musik dan menambahkannya ke antrean.
+                    </p>
+                  ) : (
+                    catalogResults.map((item) => (
                       <div
-                        key={`${item.id}-${idx}`}
+                        key={`cat-${item.id}`}
                         style={{
                           display: "grid",
                           gridTemplateColumns: "38px minmax(0, 1fr) auto",
                           alignItems: "center",
-                          gap: 10,
-                          padding: "7px 8px",
+                          gap: 8,
+                          padding: "6px 8px",
                           borderRadius: "var(--radius-sm)",
-                          background: isCurrent ? "var(--surface-active)" : "transparent",
+                          background: "var(--surface)",
+                          border: "1px solid var(--border-subtle)",
                         }}
                       >
-                        <button
-                          type="button"
-                          onClick={() => void playTrack(item, queue, idx)}
-                          style={{ position: "relative", width: 38, height: 38, borderRadius: 8, overflow: "hidden" }}
-                          aria-label={`Play ${item.title}`}
-                        >
-                          <Artwork src={item.artwork} alt="" className="track-thumb-img" size={76} />
-                        </button>
+                        <Artwork src={item.artwork} alt="" className="track-thumb-img" size={76} />
+                        <div style={{ minWidth: 0 }}>
+                          <div className="track-title" style={{ fontSize: "0.82rem" }}>{item.title}</div>
+                          <div className="track-artist" style={{ fontSize: "0.72rem" }}>{item.artist}</div>
+                        </div>
 
-                        <button
-                          type="button"
-                          onClick={() => void playTrack(item, queue, idx)}
-                          style={{ minWidth: 0, textAlign: "left" }}
-                        >
-                          <div
-                            className="track-title"
-                            style={{ fontSize: "0.86rem", color: isCurrent ? "var(--accent)" : "var(--ink)" }}
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ height: 28, fontSize: "0.72rem", padding: "0 8px", gap: 3 }}
+                            onClick={() => addToQueue(item, true)}
+                            title="Mainkan lagu ini tepat setelah lagu aktif"
                           >
-                            {item.title}
-                          </div>
-                          <div className="track-artist" style={{ fontSize: "0.76rem" }}>
-                            {item.artist}
-                          </div>
-                        </button>
-
-                        {isCurrent ? (
-                          <EqualizerBars paused={playbackState !== "playing"} />
-                        ) : (
-                          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                            <button
-                              type="button"
-                              className="icon-btn"
-                              style={{ width: 28, height: 28 }}
-                              disabled={idx === 0}
-                              onClick={() => moveQueueItem(idx, idx - 1)}
-                              aria-label="Move track up"
-                            >
-                              <ArrowUp size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              className="icon-btn"
-                              style={{ width: 28, height: 28 }}
-                              disabled={idx === queue.length - 1}
-                              onClick={() => moveQueueItem(idx, idx + 1)}
-                              aria-label="Move track down"
-                            >
-                              <ArrowDown size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              className="icon-btn"
-                              style={{ width: 28, height: 28 }}
-                              onClick={() => removeFromQueue(idx)}
-                              aria-label="Remove track from queue"
-                            >
-                              <Trash size={13} />
-                            </button>
-                          </div>
-                        )}
+                            <ArrowRight size={12} weight="bold" />
+                            <span>Berikutnya</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ height: 28, fontSize: "0.72rem", padding: "0 8px", gap: 3 }}
+                            onClick={() => addToQueue(item, false)}
+                            title="Tambahkan ke akhir antrean"
+                          >
+                            <ListPlus size={13} />
+                            <span>Antrean</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            style={{ width: 28, height: 28 }}
+                            onClick={() => void playTrack(item)}
+                            title="Putar sekarang"
+                          >
+                            <Play size={12} weight="fill" />
+                          </button>
+                        </div>
                       </div>
-                    );
-                  })}
+                    ))
+                  )}
                 </div>
               </div>
             )}
-          </>
+
+            {/* When not searching: Normal Queue list + Smart Next Candidates */}
+            {!queueFilter.trim() && (
+              <>
+                {queue.length === 0 ? (
+                  <div className="state-panel" style={{ padding: "28px 16px" }}>
+                    <Queue size={28} weight="duotone" style={{ color: "var(--ink-muted)" }} />
+                    <p style={{ fontWeight: 600 }}>Queue is empty</p>
+                    <p style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)" }}>
+                      Playing any track builds a continuous Up Next radio queue automatically.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>
+                      Antrean Berjalan ({queue.length})
+                    </span>
+                    {filteredQueueEntries.map(({ item, idx }) => {
+                      const isCurrent = idx === queueIndex;
+                      return (
+                        <div
+                          key={`${item.id}-${idx}`}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "38px minmax(0, 1fr) auto",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "7px 8px",
+                            borderRadius: "var(--radius-sm)",
+                            background: isCurrent ? "var(--surface-active)" : "transparent",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => void playTrack(item, queue, idx)}
+                            style={{ position: "relative", width: 38, height: 38, borderRadius: 8, overflow: "hidden" }}
+                            aria-label={`Play ${item.title}`}
+                          >
+                            <Artwork src={item.artwork} alt="" className="track-thumb-img" size={76} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => void playTrack(item, queue, idx)}
+                            style={{ minWidth: 0, textAlign: "left" }}
+                          >
+                            <div
+                              className="track-title"
+                              style={{ fontSize: "0.86rem", color: isCurrent ? "var(--accent)" : "var(--ink)" }}
+                            >
+                              {item.title}
+                            </div>
+                            <div className="track-artist" style={{ fontSize: "0.76rem" }}>
+                              {item.artist}
+                            </div>
+                          </button>
+
+                          {isCurrent ? (
+                            <EqualizerBars paused={playbackState !== "playing"} />
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                style={{ width: 28, height: 28 }}
+                                disabled={idx === 0}
+                                onClick={() => moveQueueItem(idx, idx - 1)}
+                                aria-label="Move track up"
+                              >
+                                <ArrowUp size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                style={{ width: 28, height: 28 }}
+                                disabled={idx === queue.length - 1}
+                                onClick={() => moveQueueItem(idx, idx + 1)}
+                                aria-label="Move track down"
+                              >
+                                <ArrowDown size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                style={{ width: 28, height: 28 }}
+                                onClick={() => removeFromQueue(idx)}
+                                aria-label="Remove track from queue"
+                              >
+                                <Trash size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Candidate Tracks (Pilihan Musik Sebagai Kandidat Selanjutnya) */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-subtle)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <Sparkle size={16} weight="fill" style={{ color: "var(--accent)" }} />
+                      <span style={{ fontWeight: 700, fontSize: "0.86rem", color: "var(--ink)" }}>
+                        Kandidat Selanjutnya
+                      </span>
+                    </div>
+                    {candidateLoading && (
+                      <CircleNotch size={14} weight="bold" style={{ animation: "spin 0.8s linear infinite", color: "var(--accent)" }} />
+                    )}
+                  </div>
+                  <p style={{ fontSize: "0.74rem", color: "var(--ink-muted)", margin: 0 }}>
+                    Rekomendasi musik pilihan yang selaras dengan lagu saat ini:
+                  </p>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {candidateTracks.map((cand) => (
+                      <div
+                        key={`candidate-${cand.id}`}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "36px minmax(0, 1fr) auto",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 8px",
+                          borderRadius: "var(--radius-sm)",
+                          background: "var(--surface)",
+                          border: "1px solid var(--border-subtle)",
+                        }}
+                      >
+                        <Artwork src={cand.artwork} alt="" className="track-thumb-img" size={72} />
+                        <div style={{ minWidth: 0 }}>
+                          <div className="track-title" style={{ fontSize: "0.82rem" }}>{cand.title}</div>
+                          <div className="track-artist" style={{ fontSize: "0.72rem" }}>{cand.artist}</div>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ height: 28, fontSize: "0.72rem", padding: "0 8px", gap: 3 }}
+                            onClick={() => addToQueue(cand, true)}
+                            title="Jadikan musik pemutar berikutnya"
+                          >
+                            <ArrowRight size={12} weight="bold" />
+                            <span>+ Berikutnya</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ height: 28, fontSize: "0.72rem", padding: "0 8px" }}
+                            onClick={() => addToQueue(cand, false)}
+                            title="Tambahkan ke antrean"
+                          >
+                            + Antrean
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            style={{ width: 28, height: 28 }}
+                            onClick={() => void playTrack(cand)}
+                            title="Putar langsung sekarang"
+                          >
+                            <Play size={12} weight="fill" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {activeTab === "studio" && (
@@ -627,8 +992,8 @@ export function StudioDrawer({
   );
 
   if (embedded) {
-    return <div className="np-side-panel">{inner}</div>;
+    return <aside className="studio-embedded-panel">{inner}</aside>;
   }
 
-  return <aside className="studio-drawer" aria-label="Studio lyrics and queue panel">{inner}</aside>;
+  return <aside className="studio-drawer">{inner}</aside>;
 }

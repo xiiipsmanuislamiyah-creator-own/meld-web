@@ -39,7 +39,7 @@ export function CommandSearchModal({
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!open || trimmed.length < 2 || /open\.spotify\.com/i.test(trimmed)) {
+    if (!open || trimmed.length < 1 || /open\.spotify\.com/i.test(trimmed)) {
       setTracks([]);
       return;
     }
@@ -49,7 +49,7 @@ export function CommandSearchModal({
         .then((res) => setTracks(res.tracks.slice(0, 6)))
         .catch(() => setTracks([]))
         .finally(() => setLoading(false));
-    }, 280);
+    }, 100);
     return () => clearTimeout(timer);
   }, [query, open]);
 

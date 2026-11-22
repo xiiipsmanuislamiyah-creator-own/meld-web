@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
 import {
-  Gear,
+  List,
   MagnifyingGlass,
-  Moon,
-  Palette,
   SidebarSimple,
   SpotifyLogo,
-  Sun,
 } from "@phosphor-icons/react";
+import { QuickSettingsModal } from "./components/QuickSettingsModal";
 import type { NavTab, Track } from "./types/music";
-import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import { SettingsProvider } from "./context/SettingsContext";
 import { ToastProvider } from "./context/ToastContext";
 import { LibraryProvider } from "./context/LibraryContext";
@@ -53,10 +51,10 @@ function MeldWorkspace() {
   const [searchQuery, setSearchQuery] = useState("");
   const [spotifyModalOpen, setSpotifyModalOpen] = useState(false);
   const [cmdSearchOpen, setCmdSearchOpen] = useState(false);
+  const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
 
-  const { resolvedTheme, setThemePref, dynamicColor, setDynamicColor } = useTheme();
-  const { drawerOpen, setDrawerOpen } = usePlayer();
+  const { drawerOpen, setDrawerOpen, setDrawerTab } = usePlayer();
 
   const navigateTab = (tab: NavTab) => {
     setActiveTab(tab);
@@ -149,34 +147,15 @@ function MeldWorkspace() {
               <SpotifyLogo size={19} weight="fill" style={{ color: "var(--accent)" }} />
             </button>
 
+            {/* 3-Lines (Hamburger) button replacing sun/palette into Settings */}
             <button
               type="button"
-              className={`icon-btn icon-btn-surface topbar-hide-mobile${dynamicColor ? " is-active" : ""}`}
-              onClick={() => setDynamicColor(!dynamicColor)}
-              aria-label={dynamicColor ? "Disable dynamic cover colors" : "Enable dynamic cover colors"}
-              title={dynamicColor ? "Cover Chroma: On" : "Cover Chroma: Off"}
+              className={`icon-btn icon-btn-surface${quickSettingsOpen ? " is-active" : ""}`}
+              onClick={() => setQuickSettingsOpen(true)}
+              aria-label="Buka Pengaturan & Kontrol (≡)"
+              title="Pengaturan (≡)"
             >
-              <Palette size={19} weight={dynamicColor ? "fill" : "regular"} />
-            </button>
-
-            <button
-              type="button"
-              className="icon-btn icon-btn-surface topbar-hide-mobile"
-              onClick={() => setThemePref(resolvedTheme === "light" ? "dark" : "light")}
-              aria-label={resolvedTheme === "light" ? "Switch to adaptive dark mode" : "Switch to light paper mode"}
-              title={resolvedTheme === "light" ? "Switch to Dark" : "Switch to Light"}
-            >
-              {resolvedTheme === "light" ? <Moon size={19} weight="fill" /> : <Sun size={19} weight="fill" />}
-            </button>
-
-            <button
-              type="button"
-              className={`icon-btn icon-btn-surface${activeTab === "settings" && !activeCollectionId ? " is-active" : ""}`}
-              onClick={() => navigateTab("settings")}
-              aria-label="Open settings"
-              title="Settings"
-            >
-              <Gear size={19} weight={activeTab === "settings" && !activeCollectionId ? "fill" : "regular"} />
+              <List size={22} weight="bold" />
             </button>
 
             <button
@@ -280,6 +259,15 @@ function MeldWorkspace() {
       <AddToPlaylistModal
         track={playlistModalTrack}
         onClose={() => setPlaylistModalTrack(null)}
+      />
+
+      <QuickSettingsModal
+        open={quickSettingsOpen}
+        onClose={() => setQuickSettingsOpen(false)}
+        onOpenQueue={() => {
+          setDrawerTab("queue");
+          setDrawerOpen(true);
+        }}
       />
     </div>
   );

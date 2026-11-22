@@ -113,10 +113,10 @@ export function SearchView({
   );
   const isYtmLink = /music\.youtube\.com\/playlist\?list=/i.test(query.trim());
 
-  // Autocomplete suggestions in Online mode
+  // Autocomplete suggestions in Online mode (Instant per-word)
   useEffect(() => {
     const clean = query.trim();
-    if (scope !== "online" || clean.length < 2 || isSpotifyLink || isYtmLink) {
+    if (scope !== "online" || clean.length < 1 || isSpotifyLink || isYtmLink) {
       setSuggestions([]);
       return;
     }
@@ -124,15 +124,15 @@ export function SearchView({
       fetchSearchSuggestions(clean, settings.region)
         .then((res) => setSuggestions(res.suggestions || []))
         .catch(() => setSuggestions([]));
-    }, 220);
+    }, 75);
     return () => clearTimeout(timer);
   }, [query, scope, isSpotifyLink, isYtmLink, settings.region]);
 
-  // Online search execution
+  // Online search execution (Instant responsive debounce: 110ms)
   useEffect(() => {
     if (scope !== "online") return;
     const clean = query.trim();
-    if (clean.length < 2 || isSpotifyLink || isYtmLink) {
+    if (clean.length < 1 || isSpotifyLink || isYtmLink) {
       setTopResult(null);
       setTracks([]);
       setCollections([]);
@@ -161,7 +161,7 @@ export function SearchView({
           setError(err instanceof Error ? err.message : "Search request failed.");
         })
         .finally(() => setLoading(false));
-    }, 300);
+    }, 110);
 
     return () => clearTimeout(timer);
   }, [query, scope, filter, isSpotifyLink, isYtmLink, settings.region, settings.hideVideoSongs]);
@@ -274,6 +274,33 @@ export function SearchView({
           )}
         </div>
       </form>
+
+      {/* Quick Instant Search Word Chips */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" }}>
+        <span style={{ fontSize: "0.72rem", color: "var(--ink-muted)", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
+          <Lightning size={12} weight="fill" style={{ color: "var(--accent)" }} /> Cepat:
+        </span>
+        {["Hindia", "Tulus", "Bernadya", "Pop Hits", "Lo-Fi Beats", "Rock Classics", "Piano Ambient", "Midnight Jazz"].map((tag) => (
+          <button
+            key={tag}
+            type="button"
+            className="btn btn-ghost"
+            style={{
+              minHeight: 28,
+              padding: "0 10px",
+              fontSize: "0.74rem",
+              borderRadius: "var(--radius-pill)",
+              background: query === tag ? "var(--surface-active)" : "var(--surface-raised)",
+              color: query === tag ? "var(--accent)" : "var(--ink-secondary)",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+            onClick={() => setQuery(tag)}
+          >
+            {tag}
+          </button>
+        ))}
+      </div>
 
       {/* Dual Scope Switcher (Online vs My Library) + Sort Dropdown */}
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}>

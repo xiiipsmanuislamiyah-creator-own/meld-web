@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowsOutSimple,
+  DotsSixVertical,
   Heart,
   MicrophoneStage,
   Pause,
@@ -19,6 +20,12 @@ import { formatTime } from "../lib/waveform";
 
 export function MiniNowPill() {
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const dragStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
   const {
     currentTrack,
     playbackState,
@@ -37,14 +44,64 @@ export function MiniNowPill() {
   const { isLiked, toggleLike } = useLibrary();
   const { notify } = useToast();
 
-  if (!currentTrack) return null;
-
   const isPlaying = playbackState === "playing";
-  const liked = isLiked(currentTrack.id);
-  const dur = duration || currentTrack.durationSec || 1;
-  const pct = Math.min(100, Math.max(0, (currentTime / dur) * 100));
+  const liked = currentTrack ? isLiked(currentTrack.id) : false;
+  const dur = currentTrack ? (duration || currentTrack.durationSec || 1) : 1;
+  void dur;
 
   const showPopover = popoverOpen || pipMode === "floating";
+
+  // Draggable Mouse & Touch handlers
+  const handleStartDrag = (clientX: number, clientY: number) => {
+    const rect = popoverRef.current?.getBoundingClientRect();
+    const initX = dragPos ? dragPos.x : (rect ? rect.left : Math.max(12, window.innerWidth - 350));
+    const initY = dragPos ? dragPos.y : (rect ? rect.top : 70);
+    dragStartRef.current = { startX: clientX, startY: clientY, initX, initY };
+    setIsDragging(true);
+  };
+
+  const onDragMove = useCallback((clientX: number, clientY: number) => {
+    if (!dragStartRef.current) return;
+    const dx = clientX - dragStartRef.current.startX;
+    const dy = clientY - dragStartRef.current.startY;
+    const nextX = Math.max(8, Math.min(window.innerWidth - 320, dragStartRef.current.initX + dx));
+    const nextY = Math.max(8, Math.min(window.innerHeight - 180, dragStartRef.current.initY + dy));
+    setDragPos({ x: nextX, y: nextY });
+  }, []);
+
+  const endDrag = useCallback(() => {
+    dragStartRef.current = null;
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      onDragMove(e.clientX, e.clientY);
+    };
+    const handleMouseUp = () => endDrag();
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        onDragMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+    const handleTouchEnd = () => endDrag();
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [isDragging, onDragMove, endDrag]);
+
+  if (!currentTrack) return null;
 
   return (
     <div style={{ position: "relative" }}>
@@ -62,10 +119,64 @@ export function MiniNowPill() {
 
       {showPopover && (
         <div
+          ref={popoverRef}
           className="mini-now-popover"
           role="dialog"
           aria-label="Quick playback controller"
+          style={{
+            position: "fixed",
+            left: dragPos ? `${dragPos.x}px` : undefined,
+            top: dragPos ? `${dragPos.y}px` : undefined,
+            right: dragPos ? "auto" : "16px",
+            transform: isDragging ? "scale(1.02)" : "none",
+            boxShadow: isDragging
+              ? "0 16px 36px rgba(0, 0, 0, 0.45)"
+              : "var(--shadow-modal)",
+            transition: isDragging ? "none" : "box-shadow 0.2s ease, transform 0.15s ease",
+            userSelect: isDragging ? "none" : "auto",
+          }}
         >
+          {/* Dedicated Drag Grip Bar */}
+          <div
+            className="mini-now-drag-handle"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              handleStartDrag(e.clientX, e.clientY);
+            }}
+            onTouchStart={(e) => {
+              if (e.touches.length > 0) {
+                handleStartDrag(e.touches[0].clientX, e.touches[0].clientY);
+              }
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              cursor: isDragging ? "grabbing" : "grab",
+              padding: "2px 4px 6px",
+              touchAction: "none",
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+              marginBottom: 4,
+            }}
+            title="Tahan & geser untuk memindahkan posisi bubble player"
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--dock-ink-muted)", fontSize: "0.72rem" }}>
+              <DotsSixVertical size={16} weight="bold" />
+              <span>Geser Bubble</span>
+            </div>
+            <div
+              style={{
+                width: 32,
+                height: 4,
+                borderRadius: 2,
+                background: "rgba(255,255,255,0.22)",
+              }}
+            />
+            <span style={{ fontSize: "0.68rem", color: "var(--dock-ink-muted)", opacity: 0.8 }}>
+              {dragPos ? "Kustom" : "Pojok Kanan"}
+            </span>
+          </div>
+
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Artwork
               src={currentTrack.artwork}
@@ -131,9 +242,6 @@ export function MiniNowPill() {
             <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--dock-ink-muted)" }}>
               <span>{formatTime(currentTime)}</span>
               <span>-{formatTime(Math.max(0, dur - currentTime))}</span>
-            </div>
-            <div style={{ height: 2, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden", display: "none" }}>
-              <div style={{ width: `${pct}%`, height: "100%", background: "var(--dock-accent)" }} />
             </div>
           </div>
 

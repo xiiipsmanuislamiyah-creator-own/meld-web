@@ -5,9 +5,8 @@ import {
   CaretDown,
   CircleNotch,
   Heart,
-  Moon,
+  List,
   Pause,
-  PictureInPicture,
   Play,
   Playlist,
   Radio,
@@ -19,20 +18,16 @@ import {
   SkipForward,
   SpeakerHigh,
   SpeakerSlash,
-  Sun,
-  Timer,
-  VideoCamera,
 } from "@phosphor-icons/react";
 import type { Track } from "../types/music";
 import { usePlayer, type DrawerTab } from "../context/PlayerContext";
 import { useLibrary } from "../context/LibraryContext";
-import { useTheme } from "../context/ThemeContext";
 import { useSettings } from "../context/SettingsContext";
 import { useToast } from "../context/ToastContext";
 import { Artwork } from "./Artwork";
 import { WaveformScrubber } from "./WaveformScrubber";
 import { StudioDrawer } from "./StudioDrawer";
-import { formatTime } from "../lib/waveform";
+import { QuickSettingsModal } from "./QuickSettingsModal";
 
 interface NowPlayingOverlayProps {
   onAddToPlaylist: (track: Track) => void;
@@ -51,14 +46,9 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
     shuffle,
     repeat,
     playbackRate,
-    sleepTimerSec,
-    sleepTimerEndOfTrack,
     nowPlayingOpen,
     videoStageOpen,
-    pipMode,
     setNowPlayingOpen,
-    setVideoStageOpen,
-    togglePictureInPicture,
     togglePlayPause,
     nextTrack,
     prevTrack,
@@ -72,12 +62,12 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
   } = usePlayer();
 
   const { isLiked, toggleLike } = useLibrary();
-  const { resolvedTheme, setThemePref } = useTheme();
   const { settings } = useSettings();
   const { notify } = useToast();
 
   const [sideTab, setSideTab] = useState<DrawerTab>("lyrics");
   const [mobileView, setMobileView] = useState<"playing" | DrawerTab>("playing");
+  const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
@@ -126,8 +116,6 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
     else void prevTrack();
   };
 
-  const hasTimer = sleepTimerSec !== null || sleepTimerEndOfTrack;
-
   return (
     <div
       className="now-playing-backdrop"
@@ -159,74 +147,34 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button
             type="button"
-            className={`icon-btn icon-btn-surface${hasTimer ? " is-active" : ""}`}
-            onClick={() => {
-              setSideTab("studio");
-              setMobileView("studio");
-            }}
-            aria-label="Open sleep timer and palette"
-            title={
-              sleepTimerSec !== null
-                ? `Sleep timer: ${formatTime(sleepTimerSec)}`
-                : sleepTimerEndOfTrack
-                  ? "Sleep at end of track"
-                  : "Sleep timer & Theme"
-            }
-          >
-            <Timer size={18} weight={hasTimer ? "fill" : "regular"} />
-          </button>
-
-          <button
-            type="button"
-            className={`icon-btn icon-btn-surface${pipMode !== "off" ? " is-active" : ""}`}
-            onClick={() => void togglePictureInPicture()}
-            aria-label="Toggle Background Picture in Picture"
-            title="Background Picture-in-Picture"
-          >
-            <PictureInPicture size={18} weight={pipMode !== "off" ? "fill" : "regular"} />
-          </button>
-
-          <button
-            type="button"
-            className={`icon-btn icon-btn-surface${videoStageOpen ? " is-active" : ""}`}
-            onClick={() => {
-              setVideoStageOpen(!videoStageOpen);
-              if (!videoStageOpen) setMobileView("playing");
-            }}
-            aria-label={videoStageOpen ? "Switch to album cover" : "Show video stage"}
-            title={videoStageOpen ? "Show Album Cover" : "Watch Music Video"}
-          >
-            <VideoCamera size={18} weight={videoStageOpen ? "fill" : "regular"} />
-          </button>
-
-          <button
-            type="button"
-            className="icon-btn icon-btn-surface"
-            onClick={() => setThemePref(resolvedTheme === "light" ? "dark" : "light")}
-            aria-label={resolvedTheme === "light" ? "Switch to adaptive dark mode" : "Switch to light paper mode"}
-          >
-            {resolvedTheme === "light" ? <Moon size={18} weight="fill" /> : <Sun size={18} weight="fill" />}
-          </button>
-
-          <button
-            type="button"
             className="icon-btn icon-btn-surface np-hide-xs"
             onClick={handleShare}
             aria-label="Share track link"
+            title="Bagikan Lagu"
           >
             <ShareNetwork size={18} />
+          </button>
+
+          {/* 3-Lines (Hamburger/Menu) Button replacing sun/palette/video/timer with unified Settings */}
+          <button
+            type="button"
+            className={`icon-btn icon-btn-surface${quickSettingsOpen ? " is-active" : ""}`}
+            onClick={() => setQuickSettingsOpen(true)}
+            aria-label="Buka Pengaturan & Kontrol (≡)"
+            title="Pengaturan & Kontrol (≡)"
+          >
+            <List size={20} weight="bold" />
           </button>
         </div>
       </div>
 
-      {/* Mobile Segmented Switcher (Playing | Lyrics | Queue | Palette) */}
+      {/* Mobile Segmented Switcher (Playing | Lyrics | Queue) */}
       <div className="np-mobile-tabs" role="tablist" aria-label="Now Playing views">
         {(
           [
             { id: "playing", label: "Playing" },
             { id: "lyrics", label: "Lyrics" },
             { id: "queue", label: "Queue" },
-            { id: "studio", label: "Palette" },
           ] as const
         ).map((tab) => (
           <button
@@ -442,6 +390,15 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
           }}
         />
       </div>
+
+      <QuickSettingsModal
+        open={quickSettingsOpen}
+        onClose={() => setQuickSettingsOpen(false)}
+        onOpenQueue={() => {
+          setSideTab("queue");
+          setMobileView("queue");
+        }}
+      />
     </div>
   );
 }
