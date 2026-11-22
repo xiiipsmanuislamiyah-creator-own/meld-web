@@ -6,22 +6,28 @@ import {
   Gear,
   Globe,
   Headphones,
+  Info,
   MagnifyingGlass,
   MicrophoneStage,
+  Minus,
   Moon,
   Palette,
+  Plus,
   Sun,
   Trash,
   UploadSimple,
 } from "@phosphor-icons/react";
 import type { CardRadiusPreset, ContentRegion, ThemePreference } from "../types/music";
 import { exportLibraryBackupJson } from "../lib/storage";
+import { semitonesToRatio } from "../lib/audioDsp";
 import { useTheme } from "../context/ThemeContext";
 import { useSettings } from "../context/SettingsContext";
 import { useLibrary } from "../context/LibraryContext";
 import { useToast } from "../context/ToastContext";
+import { AudioEqualizerPanel } from "../components/AudioEqualizerPanel";
+import { DeveloperProfileCard } from "../components/DeveloperProfileCard";
 
-type SettingsCategory = "all" | "appearance" | "player" | "lyrics" | "content" | "data";
+type SettingsCategory = "all" | "appearance" | "player" | "lyrics" | "content" | "data" | "info";
 
 const REGIONS: { code: ContentRegion; label: string }[] = [
   { code: "ID", label: "Indonesia (ID)" },
@@ -33,6 +39,15 @@ const REGIONS: { code: ContentRegion; label: string }[] = [
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const SKIP_DURATIONS = [5, 10, 15, 30];
+const TRANSLATE_LANG_OPTIONS = [
+  { code: "id", label: "Bahasa Indonesia (ID)" },
+  { code: "en", label: "English (EN)" },
+  { code: "ms", label: "Bahasa Melayu (MS)" },
+  { code: "ja", label: "Japanese (JA)" },
+  { code: "ko", label: "Korean (KO)" },
+  { code: "ar", label: "Arabic (AR)" },
+  { code: "es", label: "Spanish (ES)" },
+];
 
 export function SettingsView() {
   const [category, setCategory] = useState<SettingsCategory>("all");
@@ -110,12 +125,13 @@ export function SettingsView() {
       <div className="mood-bar" role="tablist" aria-label="Settings categories">
         {(
           [
-            { id: "all", label: "All" },
-            { id: "appearance", label: "Appearance" },
-            { id: "player", label: "Player & Audio" },
-            { id: "lyrics", label: "Lyrics" },
-            { id: "content", label: "Content" },
+            { id: "all", label: "Semua" },
+            { id: "appearance", label: "Tampilan" },
+            { id: "player", label: "Audio & EQ" },
+            { id: "lyrics", label: "Lirik & AI" },
+            { id: "content", label: "Konten" },
             { id: "data", label: "Data & Backup" },
+            { id: "info", label: "Info & Profil" },
           ] as const
         ).map((tab) => (
           <button
@@ -217,25 +233,25 @@ export function SettingsView() {
       )}
 
       {/* PLAYER & AUDIO */}
-      {matches("player", "speed playback skip duration radio keep paused error swipe pip background") && (
+      {matches("player", "speed playback pitch nada equalizer eq bass dsp skip duration radio keep paused error swipe pip background") && (
         <section className="settings-section">
           <div className="settings-section-head">
             <Headphones size={18} weight="fill" style={{ color: "var(--accent)" }} />
-            <h2>Player & Audio</h2>
+            <h2>Player, Pitch &amp; Equalizer</h2>
           </div>
 
           <div className="settings-card">
             <div className="settings-row">
               <div>
-                <div className="settings-label">Playback Speed</div>
-                <div className="settings-desc">Current YouTube IFrame audio speed</div>
+                <div className="settings-label">Kecepatan Pemutaran ({settings.playbackRate.toFixed(2)}x)</div>
+                <div className="settings-desc">Atur kecepatan audio dari 0.25x hingga 2.0x</div>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {SPEEDS.map((sp) => (
                   <button
                     key={sp}
                     type="button"
-                    className={`mood-chip${settings.playbackRate === sp ? " is-active" : ""}`}
+                    className={`mood-chip${Math.abs(settings.playbackRate - sp) < 0.02 ? " is-active" : ""}`}
                     style={{ minHeight: 34, padding: "0 11px", fontSize: "0.8rem", fontFamily: "var(--font-mono)" }}
                     onClick={() => updateSettings({ playbackRate: sp })}
                   >
@@ -243,6 +259,58 @@ export function SettingsView() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="settings-row">
+              <div>
+                <div className="settings-label">
+                  Penggeser Nada / Pitch ({settings.pitchSemitones > 0 ? `+${settings.pitchSemitones}` : settings.pitchSemitones} st · {Math.round(semitonesToRatio(settings.pitchSemitones) * 100)}%)
+                </div>
+                <div className="settings-desc">Geser nada semitone untuk efek Slowed atau Nightcore</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  type="button"
+                  className="stepper-btn"
+                  onClick={() => updateSettings({ pitchSemitones: Math.max(-12, settings.pitchSemitones - 1) })}
+                  disabled={settings.pitchSemitones <= -12}
+                  aria-label="Turunkan nada 1 semitone"
+                >
+                  <Minus size={14} weight="bold" />
+                </button>
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, minWidth: 46, textAlign: "center" }}>
+                  {settings.pitchSemitones > 0 ? `+${settings.pitchSemitones}` : settings.pitchSemitones}st
+                </span>
+                <button
+                  type="button"
+                  className="stepper-btn"
+                  onClick={() => updateSettings({ pitchSemitones: Math.min(12, settings.pitchSemitones + 1) })}
+                  disabled={settings.pitchSemitones >= 12}
+                  aria-label="Naikkan nada 1 semitone"
+                >
+                  <Plus size={14} weight="bold" />
+                </button>
+              </div>
+            </div>
+
+            <div className="settings-row">
+              <div>
+                <div className="settings-label">Tautkan Nada ke Tempo (Nightcore / Slowed)</div>
+                <div className="settings-desc">Otomatis menyesuaikan tempo streaming saat nada digeser</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.pitchSpeedLinked}
+                className={`toggle-pill${settings.pitchSpeedLinked ? " is-on" : ""}`}
+                onClick={() => updateSettings({ pitchSpeedLinked: !settings.pitchSpeedLinked })}
+              >
+                <span className="toggle-thumb" />
+              </button>
+            </div>
+
+            <div className="settings-row" style={{ display: "block" }}>
+              <AudioEqualizerPanel />
             </div>
 
             <div className="settings-row">
@@ -427,6 +495,25 @@ export function SettingsView() {
                 style={{ width: 140, accentColor: "var(--accent)" }}
               />
             </div>
+            <div className="settings-row">
+              <div>
+                <div className="settings-label">Bahasa Target Terjemahan Lirik AI</div>
+                <div className="settings-desc">Bahasa tujuan default saat menekan tombol Terjemahkan di panel lirik</div>
+              </div>
+              <select
+                className="field-input"
+                style={{ width: "auto", minHeight: 40, padding: "0 12px" }}
+                value={settings.lyricsTranslateLang || "id"}
+                onChange={(e) => updateSettings({ lyricsTranslateLang: e.target.value })}
+                aria-label="Bahasa terjemahan lirik"
+              >
+                {TRANSLATE_LANG_OPTIONS.map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </section>
       )}
@@ -567,6 +654,18 @@ export function SettingsView() {
               </div>
             </div>
           </div>
+        </section>
+      )}
+
+      {/* INFO & PROFIL PENGEMBANG (RHMT OFC / Portofolio rhmt.biz.id) */}
+      {matches("info", "info profil developer tentang about rohmatulloh rhmt ofc portofolio github telegram instagram tiktok versi") && (
+        <section className="settings-section">
+          <div className="settings-section-head">
+            <Info size={18} weight="fill" style={{ color: "var(--accent)" }} />
+            <h2>Info &amp; Profil Pengembang</h2>
+          </div>
+
+          <DeveloperProfileCard />
         </section>
       )}
     </div>

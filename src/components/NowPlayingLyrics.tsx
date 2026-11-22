@@ -1,13 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  CircleNotch,
   Copy,
-  ImageSquare,
+  FilmStrip,
   Lightning,
   MicrophoneStage,
   Minus,
   Plus,
+  Translate,
 } from "@phosphor-icons/react";
 import type { LyricsPayload, Track } from "../types/music";
+import { translateLyricsLines } from "../lib/api";
+import { useSettings } from "../context/SettingsContext";
+import { useToast } from "../context/ToastContext";
 import { EqualizerBars } from "./EqualizerBars";
 
 interface TimedWord {
@@ -15,6 +20,14 @@ interface TimedWord {
   startFrac: number;
   endFrac: number;
 }
+
+const TRANSLATE_LANGS = [
+  { code: "id", label: "ID" },
+  { code: "en", label: "EN" },
+  { code: "ms", label: "MS" },
+  { code: "ja", label: "JP" },
+  { code: "ko", label: "KR" },
+] as const;
 
 function parseLineWords(text: string): TimedWord[] {
   const rawWords = text.trim().split(/\s+/).filter(Boolean);
@@ -36,6 +49,7 @@ interface NowPlayingLyricsProps {
   lyricsLoading: boolean;
   currentTime: number;
   playbackState: "playing" | "paused" | "buffering" | "ended" | "idle";
+  playbackRate?: number;
   lyricsFontSize: number;
   lyricsAlign: "left" | "center";
   lyricsAutoScroll: boolean;
@@ -53,6 +67,7 @@ export function NowPlayingLyrics({
   lyricsLoading,
   currentTime,
   playbackState,
+  playbackRate = 1,
   lyricsFontSize,
   lyricsAlign,
   lyricsAutoScroll,
@@ -63,11 +78,85 @@ export function NowPlayingLyrics({
   onOpenShareModal,
   onCopyLyrics,
 }: NowPlayingLyricsProps) {
+  const { settings, updateSettings } = useSettings();
+  const { notify } = useToast();
+
   const activeLyricRef = useRef<HTMLButtonElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [scrolledAway, setScrolledAway] = useState(false);
 
-  // 60 FPS interpolated clock for fluid karaoke text sweep following music rhythm
+  // AI / Neural Lyrics Translation State
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  const [translatedLines, setTranslatedLines] = useState<string[] | null>(null);
+  const [translationEngine, setTranslationEngine] = useState<string | null>(null);
+  const targetLang = settings.lyricsTranslateLang || "id";
+
+  // Reset translation cleanly whenever track changes
+  useEffect(() => {
+    setShowTranslation(false);
+    setTranslatedLines(null);
+    setTranslationEngine(null);
+    setTranslating(false);
+  }, [currentTrack.id]);
+
+  // Extract raw lines for translation (works for synced & plain lyrics)
+  const rawLines = useMemo(() => {
+    if (!lyrics?.found) return [];
+    if (lyrics.synced && lyrics.lines.length > 0) {
+      return lyrics.lines.map((l) => l.text);
+    }
+    if (lyrics.plainText) {
+      return lyrics.plainText.split(/\r?\n/);
+    }
+    return [];
+  }, [lyrics]);
+
+  const runTranslation = async (lang: string) => {
+    if (rawLines.length === 0) return;
+    setTranslating(true);
+    try {
+      const res = await translateLyricsLines(
+        rawLines,
+        lang,
+        currentTrack.id,
+        currentTrack.title,
+        currentTrack.artist,
+      );
+      setTranslatedLines(res.translations);
+      setTranslationEngine(res.engine);
+      setShowTranslation(true);
+    } catch (err) {
+      notify(
+        err instanceof Error ? err.message : "Gagal menerjemahkan lirik.",
+        "error",
+      );
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  const handleToggleTranslate = () => {
+    if (showTranslation) {
+      setShowTranslation(false);
+      return;
+    }
+    if (translatedLines && translatedLines.length === rawLines.length) {
+      setShowTranslation(true);
+      return;
+    }
+    void runTranslation(targetLang);
+  };
+
+  const handleChangeLang = (lang: string) => {
+    updateSettings({ lyricsTranslateLang: lang });
+    setTranslatedLines(null);
+    if (showTranslation) {
+      void runTranslation(lang);
+    }
+  };
+
+  // 60 FPS interpolated clock scaled accurately by active playbackRate
   const [smoothTime, setSmoothTime] = useState(currentTime);
   const syncRef = useRef({ time: currentTime, stamp: performance.now() });
 
@@ -80,13 +169,13 @@ export function NowPlayingLyrics({
     if (playbackState !== "playing") return;
     let rafId: number;
     const loop = () => {
-      const elapsed = (performance.now() - syncRef.current.stamp) / 1000;
-      setSmoothTime(syncRef.current.time + Math.min(0.4, elapsed));
+      const elapsed = ((performance.now() - syncRef.current.stamp) / 1000) * playbackRate;
+      setSmoothTime(syncRef.current.time + Math.min(0.45 * playbackRate, elapsed));
       rafId = requestAnimationFrame(loop);
     };
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [playbackState]);
+  }, [playbackState, playbackRate]);
 
   const offsetSeconds = lyricsOffsetMs / 1000;
   const effectiveTime = smoothTime + offsetSeconds;
@@ -116,7 +205,6 @@ export function NowPlayingLyrics({
     }
   }, [activeLyricIndex, lyricsAutoScroll]);
 
-  // Detect manual scroll by user
   const handleScroll = () => {
     if (!activeLyricRef.current || !scrollContainerRef.current) return;
     const containerRect = scrollContainerRef.current.getBoundingClientRect();
@@ -145,9 +233,13 @@ export function NowPlayingLyrics({
         <div className="state-panel" style={{ padding: "36px 20px", maxWidth: 380, textAlign: "center" }}>
           <MicrophoneStage size={36} weight="duotone" style={{ color: "var(--ink-muted)", margin: "0 auto 12px" }} />
           <p style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 6 }}>Lirik Belum Tersedia</p>
-          <p style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)", lineHeight: 1.5 }}>
-            Tidak ditemukan lirik sinkron untuk "{currentTrack.title}". Musik instrumen atau lagu remix.
+          <p style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)", lineHeight: 1.5, marginBottom: 12 }}>
+            Tidak ditemukan lirik sinkron untuk "{currentTrack.title}". Anda tetap bisa membuat Video Visualizer di Studio.
           </p>
+          <button type="button" className="btn btn-secondary" style={{ minHeight: 38, fontSize: "0.82rem" }} onClick={onOpenShareModal}>
+            <FilmStrip size={16} weight="bold" />
+            <span>Buka Studio Video</span>
+          </button>
         </div>
       </div>
     );
@@ -156,22 +248,45 @@ export function NowPlayingLyrics({
   return (
     <div className="np-lyrics-container" style={{ position: "relative", width: "100%" }}>
       {/* Top Utility Bar for Lyrics */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-          padding: "6px 8px 12px",
-          borderBottom: "1px solid var(--border-subtle)",
-          marginBottom: 10,
-        }}
-      >
-        <span style={{ fontSize: "0.76rem", color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
-          {lyrics.synced ? `Sinkron via ${lyrics.source === "ytmusic" ? "YTMusic" : "LRCLIB"}` : "Lirik Polos"}
+      <div className="lyrics-toolbar">
+        <span style={{ fontSize: "0.74rem", color: "var(--ink-muted)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>
+          {lyrics.synced ? (lyrics.source === "ytmusic" ? "YTMusic" : "LRCLIB") : "Polos"}
+          {showTranslation && translationEngine ? ` · AI ${targetLang.toUpperCase()}` : ""}
         </span>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {/* AI Translate Toggle + Language Selector */}
+          <div className="lyrics-translate-group">
+            <button
+              type="button"
+              className={`lyrics-tool-pill${showTranslation ? " is-active" : ""}`}
+              onClick={handleToggleTranslate}
+              disabled={translating}
+              aria-label="Terjemahkan lirik baris per baris"
+              title="Terjemahkan Lirik AI"
+            >
+              {translating ? (
+                <CircleNotch size={13} weight="bold" style={{ animation: "spin 0.8s linear infinite" }} />
+              ) : (
+                <Translate size={14} weight="bold" />
+              )}
+              <span>{translating ? "Menerjemah..." : showTranslation ? "Terjemahan" : "Terjemahkan"}</span>
+            </button>
+
+            <select
+              value={targetLang}
+              onChange={(e) => handleChangeLang(e.target.value)}
+              aria-label="Bahasa target terjemahan lirik"
+              className="lyrics-lang-select"
+            >
+              {TRANSLATE_LANGS.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Offset timing buttons */}
           {lyrics.synced && (
             <div
@@ -183,7 +298,8 @@ export function NowPlayingLyrics({
                 borderRadius: "var(--radius-pill)",
                 background: "var(--surface-raised)",
                 fontFamily: "var(--font-mono)",
-                fontSize: "0.72rem",
+                fontSize: "0.7rem",
+                height: 30,
               }}
               title="Sinkronisasi offset waktu lirik"
             >
@@ -195,7 +311,7 @@ export function NowPlayingLyrics({
               >
                 <Minus size={11} weight="bold" />
               </button>
-              <span style={{ minWidth: 44, textAlign: "center" }}>
+              <span style={{ minWidth: 42, textAlign: "center" }}>
                 {lyricsOffsetMs > 0 ? `+${lyricsOffsetMs}` : lyricsOffsetMs}ms
               </span>
               <button
@@ -212,23 +328,23 @@ export function NowPlayingLyrics({
           <button
             type="button"
             className="icon-btn"
-            style={{ width: 32, height: 32 }}
+            style={{ width: 30, height: 30 }}
             onClick={onOpenShareModal}
-            aria-label="Bagikan kartu lirik"
-            title="Bagikan Kartu Lirik"
+            aria-label="Buka Studio Video & Kartu Lirik"
+            title="Studio Video & Kartu Lirik"
           >
-            <ImageSquare size={16} />
+            <FilmStrip size={16} weight="bold" />
           </button>
 
           <button
             type="button"
             className="icon-btn"
-            style={{ width: 32, height: 32 }}
+            style={{ width: 30, height: 30 }}
             onClick={onCopyLyrics}
             aria-label="Salin seluruh lirik"
             title="Salin lirik"
           >
-            <Copy size={16} />
+            <Copy size={15} />
           </button>
         </div>
       </div>
@@ -263,8 +379,8 @@ export function NowPlayingLyrics({
                 : 1;
 
             const words = parseLineWords(line.text);
+            const translated = showTranslation ? translatedLines?.[i] : undefined;
 
-            // Accurate karaoke rhythm sweep calculation across line duration
             let lineProgress = 0;
             if (isCurrent) {
               const lineStart = line.time;
@@ -342,6 +458,12 @@ export function NowPlayingLyrics({
                         );
                       })}
                     </div>
+
+                    {translated && translated.toLowerCase() !== line.text.trim().toLowerCase() && (
+                      <div className="lyric-translation-sub" style={{ textAlign: lyricsAlign }}>
+                        {translated}
+                      </div>
+                    )}
                   </div>
                 </div>
               </button>
@@ -349,21 +471,33 @@ export function NowPlayingLyrics({
           })}
         </div>
       ) : (
-        /* Plain lyrics fallback */
-        <div style={{ flex: 1, overflowY: "auto", padding: "12px 6px" }}>
-          <pre
-            style={{
-              margin: 0,
-              whiteSpace: "pre-wrap",
-              fontFamily: "var(--font-body)",
-              fontSize: `${Math.max(15, lyricsFontSize - 1)}px`,
-              textAlign: lyricsAlign,
-              lineHeight: 1.75,
-              color: "var(--ink-secondary)",
-            }}
-          >
-            {lyrics.plainText}
-          </pre>
+        /* Plain lyrics fallback (with optional line-by-line AI translation) */
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 6px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {rawLines.map((line, i) => {
+            const trimmed = line.trim();
+            if (!trimmed) return <div key={i} style={{ height: 8 }} />;
+            const translated = showTranslation ? translatedLines?.[i] : undefined;
+            return (
+              <div key={i} style={{ textAlign: lyricsAlign }}>
+                <div
+                  style={{
+                    fontFamily: "var(--font-body)",
+                    fontSize: `${Math.max(15, lyricsFontSize - 1)}px`,
+                    lineHeight: 1.55,
+                    color: "var(--ink)",
+                    fontWeight: 500,
+                  }}
+                >
+                  {trimmed}
+                </div>
+                {translated && translated.toLowerCase() !== trimmed.toLowerCase() && (
+                  <div className="lyric-translation-sub" style={{ textAlign: lyricsAlign }}>
+                    {translated}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

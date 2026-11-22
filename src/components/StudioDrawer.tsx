@@ -47,6 +47,7 @@ export function StudioDrawer({
     queueIndex,
     playbackState,
     currentTime,
+    effectivePlaybackRate,
     lyrics,
     lyricsLoading,
     sleepTimerSec,
@@ -126,17 +127,25 @@ export function StudioDrawer({
       return;
     }
 
+    let cancelled = false;
     setCatalogSearching(true);
     const timer = window.setTimeout(() => {
       searchCatalog(q, "songs")
         .then((res) => {
-          setCatalogResults(res.tracks.slice(0, 8));
+          if (!cancelled) setCatalogResults(res.tracks.slice(0, 8));
         })
-        .catch(() => setCatalogResults([]))
-        .finally(() => setCatalogSearching(false));
+        .catch(() => {
+          if (!cancelled) setCatalogResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setCatalogSearching(false);
+        });
     }, 160);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [queueFilter, activeTab]);
 
   const filteredQueueEntries = useMemo(() => {
@@ -244,6 +253,7 @@ export function StudioDrawer({
               lyricsLoading={lyricsLoading}
               currentTime={currentTime}
               playbackState={playbackState}
+              playbackRate={effectivePlaybackRate}
               lyricsFontSize={settings.lyricsFontSize}
               lyricsAlign={settings.lyricsAlign}
               lyricsAutoScroll={settings.lyricsAutoScroll}

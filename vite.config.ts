@@ -33,7 +33,23 @@ function localApiPlugin(): Plugin {
             query[k] = v;
           });
 
-          const vReq = Object.assign(req, { query });
+          let body: unknown = undefined;
+          if (req.method && !["GET", "HEAD"].includes(req.method.toUpperCase())) {
+            const chunks: Buffer[] = [];
+            for await (const chunk of req) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            }
+            const rawBody = Buffer.concat(chunks).toString("utf-8").trim();
+            if (rawBody) {
+              try {
+                body = JSON.parse(rawBody);
+              } catch {
+                body = rawBody;
+              }
+            }
+          }
+
+          const vReq = Object.assign(req, { query, body });
           const vRes = Object.assign(res, {
             status(code: number) {
               res.statusCode = code;

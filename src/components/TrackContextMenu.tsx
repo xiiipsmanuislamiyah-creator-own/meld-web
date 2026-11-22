@@ -28,6 +28,7 @@ export function TrackContextMenu({
   size = 36,
 }: TrackContextMenuProps) {
   const [open, setOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const { addToQueue, startRadioFromTrack } = usePlayer();
@@ -36,6 +37,11 @@ export function TrackContextMenu({
 
   useEffect(() => {
     if (!open) return;
+    if (wrapRef.current) {
+      const rect = wrapRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUpward(spaceBelow < 290 && rect.top > 240);
+    }
     const onOutside = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
         setOpen(false);
@@ -72,7 +78,11 @@ export function TrackContextMenu({
       </button>
 
       {open && (
-        <div className="track-ctx-menu" role="menu" aria-label={`Actions for ${track.title}`}>
+        <div
+          className={`track-ctx-menu${openUpward ? " open-upward" : ""}`}
+          role="menu"
+          aria-label={`Actions for ${track.title}`}
+        >
           <button
             type="button"
             role="menuitem"

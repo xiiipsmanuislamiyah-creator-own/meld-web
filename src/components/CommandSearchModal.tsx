@@ -41,16 +41,27 @@ export function CommandSearchModal({
     const trimmed = query.trim();
     if (!open || trimmed.length < 1 || /open\.spotify\.com/i.test(trimmed)) {
       setTracks([]);
+      setLoading(false);
       return;
     }
+    let cancelled = false;
     const timer = window.setTimeout(() => {
       setLoading(true);
       searchCatalog(trimmed, "songs")
-        .then((res) => setTracks(res.tracks.slice(0, 6)))
-        .catch(() => setTracks([]))
-        .finally(() => setLoading(false));
+        .then((res) => {
+          if (!cancelled) setTracks(res.tracks.slice(0, 6));
+        })
+        .catch(() => {
+          if (!cancelled) setTracks([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     }, 100);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [query, open]);
 
   if (!open) return null;

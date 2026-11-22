@@ -6,12 +6,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import type { LyricsPayload, RepeatMode, Track } from "../types/music";
+import type { EqSettings, LyricsPayload, RepeatMode, Track } from "../types/music";
 import {
   fetchTrackLyrics,
   fetchUpNextRadio,
   resolveTrackToVideoId,
 } from "../lib/api";
+import { DEFAULT_EQ_SETTINGS, semitonesToRatio, sharedAudioDsp } from "../lib/audioDsp";
 import { BackgroundPipController, type PipMode } from "../lib/pip";
 import { storage } from "../lib/storage";
 import { YouTubeAudioEngine } from "../lib/ytEngine";
@@ -35,6 +36,10 @@ interface PlayerContextValue {
   shuffle: boolean;
   repeat: RepeatMode;
   playbackRate: number;
+  pitchSemitones: number;
+  pitchSpeedLinked: boolean;
+  effectivePlaybackRate: number;
+  eq: EqSettings;
   sleepTimerSec: number | null;
   sleepTimerEndOfTrack: boolean;
   nowPlayingOpen: boolean;
@@ -56,6 +61,10 @@ interface PlayerContextValue {
   toggleShuffle: () => void;
   cycleRepeat: () => void;
   setPlaybackRate: (rate: number) => void;
+  setPitchSemitones: (semitones: number) => void;
+  setPitchSpeedLinked: (linked: boolean) => void;
+  setEqSettings: (patch: Partial<EqSettings>) => void;
+  resetSpeedPitch: () => void;
   addToQueue: (track: Track, playNext?: boolean) => void;
   removeFromQueue: (index: number) => void;
   moveQueueItem: (from: number, to: number) => void;
@@ -310,10 +319,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync playbackRate setting to engine
+  // Compute effective playback rate (couples pitch semitones when Pitch-Tempo Link is active)
+  const effectivePlaybackRate = Math.max(
+    0.25,
+    Math.min(
+      2.0,
+      Math.round(
+        settings.playbackRate *
+          (settings.pitchSpeedLinked ? semitonesToRatio(settings.pitchSemitones) : 1) *
+          100,
+      ) / 100,
+    ),
+  );
+
+  // Sync effective playbackRate to YouTube engine
   useEffect(() => {
-    engineRef.current?.setPlaybackRate(settings.playbackRate);
-  }, [settings.playbackRate]);
+    engineRef.current?.setPlaybackRate(effectivePlaybackRate);
+  }, [effectivePlaybackRate]);
+
+  // Sync EQ settings to shared Web Audio DSP graph whenever changed
+  useEffect(() => {
+    sharedAudioDsp.applyEq(settings.eq || DEFAULT_EQ_SETTINGS);
+  }, [settings.eq]);
 
   // Silent background audio keep-alive (prevents browser/mobile sleeping or stopping audio on tab exit)
   useEffect(() => {
@@ -639,12 +666,44 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const setPlaybackRate = useCallback(
     (rate: number) => {
-      updateSettings({ playbackRate: rate });
-      engineRef.current?.setPlaybackRate(rate);
-      notify(`Playback speed: ${rate}x`, "info");
+      const clamped = Math.max(0.25, Math.min(2.0, Math.round(rate * 100) / 100));
+      updateSettings({ playbackRate: clamped });
     },
-    [notify, updateSettings],
+    [updateSettings],
   );
+
+  const setPitchSemitones = useCallback(
+    (semitones: number) => {
+      const clamped = Math.max(-12, Math.min(12, Math.round(semitones * 2) / 2));
+      updateSettings({ pitchSemitones: clamped });
+    },
+    [updateSettings],
+  );
+
+  const setPitchSpeedLinked = useCallback(
+    (linked: boolean) => {
+      updateSettings({ pitchSpeedLinked: linked });
+    },
+    [updateSettings],
+  );
+
+  const setEqSettings = useCallback(
+    (patch: Partial<EqSettings>) => {
+      const currentEq = stateRef.current.settings.eq || DEFAULT_EQ_SETTINGS;
+      const nextEq: EqSettings = {
+        ...currentEq,
+        ...patch,
+      };
+      updateSettings({ eq: nextEq });
+      sharedAudioDsp.applyEq(nextEq);
+    },
+    [updateSettings],
+  );
+
+  const resetSpeedPitch = useCallback(() => {
+    updateSettings({ playbackRate: 1, pitchSemitones: 0 });
+    notify("Kecepatan & nada direset ke normal (1.0x · 0 st)", "info");
+  }, [notify, updateSettings]);
 
   const addToQueue = useCallback(
     (track: Track, playNext = false) => {
@@ -804,6 +863,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         shuffle,
         repeat,
         playbackRate: settings.playbackRate,
+        pitchSemitones: settings.pitchSemitones,
+        pitchSpeedLinked: settings.pitchSpeedLinked,
+        effectivePlaybackRate,
+        eq: settings.eq || DEFAULT_EQ_SETTINGS,
         sleepTimerSec,
         sleepTimerEndOfTrack,
         nowPlayingOpen,
@@ -825,6 +888,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         toggleShuffle,
         cycleRepeat,
         setPlaybackRate,
+        setPitchSemitones,
+        setPitchSpeedLinked,
+        setEqSettings,
+        resetSpeedPitch,
         addToQueue,
         removeFromQueue,
         moveQueueItem,

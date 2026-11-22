@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { MusicNotes } from "@phosphor-icons/react";
 
 interface ArtworkProps {
@@ -19,6 +19,11 @@ export function Artwork({
   size = 300,
 }: ArtworkProps) {
   const [failed, setFailed] = useState(false);
+
+  // Reset error state whenever artwork source URL changes (fixes stale broken cover bug)
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
 
   if (!src || failed) {
     return (

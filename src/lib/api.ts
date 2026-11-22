@@ -3,6 +3,7 @@ import type {
   ContentRegion,
   HomePayload,
   LyricsPayload,
+  LyricsTranslationPayload,
   SearchFilter,
   SearchPayload,
   Track,
@@ -87,6 +88,41 @@ export function fetchTrackLyrics(
     params.set("duration", String(Math.round(durationSec)));
   }
   return fetchJson<LyricsPayload>(`/api/lyrics?${params.toString()}`, 600_000);
+}
+
+const translationCache = new Map<string, LyricsTranslationPayload>();
+
+export async function translateLyricsLines(
+  lines: string[],
+  targetLang: string,
+  trackId: string,
+  trackTitle?: string,
+  artist?: string,
+): Promise<LyricsTranslationPayload> {
+  const cacheKey = `${trackId}::${targetLang}::${lines.length}`;
+  const hit = translationCache.get(cacheKey);
+  if (hit) return hit;
+
+  const res = await fetch("/api/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lines, targetLang, trackTitle, artist }),
+  });
+
+  if (!res.ok) {
+    let msg = `Terjemahan gagal (${res.status})`;
+    try {
+      const errBody = await res.json();
+      if (errBody?.error) msg = errBody.error;
+    } catch {
+      // ignore json parse error
+    }
+    throw new Error(msg);
+  }
+
+  const data = (await res.json()) as LyricsTranslationPayload;
+  translationCache.set(cacheKey, data);
+  return data;
 }
 
 export function importSpotifyCollection(url: string): Promise<CollectionDetail> {

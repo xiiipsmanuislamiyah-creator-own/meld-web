@@ -6,8 +6,8 @@ Official design reference for **Meld Web**. Every future page, view, drawer, mod
 
 ## 1. Project overview
 
-- **Website / product name:** Meld — Open Music Player for Web (`meld-web`)
-- **Website type:** Client-side music streaming web application & PWA (inspired by `FrancescoGrazioso/Meld`)
+- **Website / product name:** Meld Web v2.1 — Studio Music Player & Lyrics Suite (`meld-web`) by Rohmatulloh (`RHMT OFC`, `rhmt.biz.id`)
+- **Website type:** Client-side music streaming web application & PWA with Web Audio 5-Band Equalizer DSP, AI Lyrics Translation, and Canvas Lyrics Video Exporter
 - **Surface profile:** **App / Product UI (B3)** + **Mobile Web PWA (B4)**
 - **Platform:** Web (Desktop 3-panel Studio Workspace + Mobile thumb-zone PWA down to 375px)
 - **Target users:** Listeners who want Spotify-grade playlist discovery and YouTube Music's ad-free catalog inside a calm, editorial, tactile light-first interface

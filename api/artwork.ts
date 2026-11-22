@@ -10,6 +10,7 @@ const ALLOWED_HOSTS = new Set([
   "image-cdn-fa.spotifycdn.com",
   "seeded-session-images.scdn.co",
   "wrapped-images.spotifycdn.com",
+  "rhmt.biz.id",
 ]);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

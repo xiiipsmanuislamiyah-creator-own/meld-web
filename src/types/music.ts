@@ -88,6 +88,28 @@ export interface LyricsPayload {
   source: "lrclib" | "ytmusic" | "none";
 }
 
+export interface LyricsTranslationPayload {
+  translations: string[];
+  targetLang: string;
+  engine: "gemini-ai" | "neural-translate" | string;
+}
+
+export type EqPresetId =
+  | "flat"
+  | "bass"
+  | "vocal"
+  | "acoustic"
+  | "electronic"
+  | "latenight"
+  | "custom";
+
+export interface EqSettings {
+  enabled: boolean;
+  preset: EqPresetId;
+  bands: [number, number, number, number, number]; // -12..12 dB (60Hz, 230Hz, 910Hz, 3.6kHz, 14kHz)
+  bassBoost: number; // 0..12 dB
+}
+
 export interface DynamicPalette {
   hue: number;
   chroma: number;
@@ -123,7 +145,11 @@ export interface AppSettings {
   lyricsProgressiveBlur: boolean;
   lyricsAutoScroll: boolean;
   lyricsOffsetMs: number; // -2000..2000
-  playbackRate: number; // 0.5..2
+  lyricsTranslateLang: string; // id | en | ms | ja | ko | ar | es
+  playbackRate: number; // 0.25..2
+  pitchSemitones: number; // -12..12
+  pitchSpeedLinked: boolean; // links pitch & tempo for Nightcore/Slowed effect
+  eq: EqSettings;
   skipSeconds: number; // 5 | 10 | 15 | 30
   autoContinueRadio: boolean;
   keepPausedOnChange: boolean;

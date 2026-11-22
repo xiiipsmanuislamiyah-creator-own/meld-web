@@ -171,40 +171,45 @@ function MeldWorkspace() {
         </header>
 
         <main id="main-content" className="content-wrap">
-          {activeCollectionId ? (
-            <CollectionView
-              collectionId={activeCollectionId}
-              onBack={() => navigateTab(activeTab)}
-              onOpenCollection={navigateCollection}
-              onAddToPlaylist={setPlaylistModalTrack}
-            />
-          ) : activeTab === "home" ? (
-            <HomeView
-              onOpenCollection={navigateCollection}
-              onNavigateTab={navigateTab}
-              onAddToPlaylist={setPlaylistModalTrack}
-            />
-          ) : activeTab === "search" ? (
-            <SearchView
-              initialQuery={searchQuery}
-              onOpenCollection={navigateCollection}
-              onAddToPlaylist={setPlaylistModalTrack}
-              onImportedSpotify={(detail) => navigateCollection(detail.id)}
-            />
-          ) : activeTab === "explore" ? (
-            <ExploreView
-              onOpenCollection={navigateCollection}
-              onAddToPlaylist={setPlaylistModalTrack}
-            />
-          ) : activeTab === "settings" ? (
-            <SettingsView />
-          ) : (
-            <LibraryView
-              onOpenCollection={navigateCollection}
-              onOpenSpotifyImport={() => setSpotifyModalOpen(true)}
-              onAddToPlaylist={setPlaylistModalTrack}
-            />
-          )}
+          <div
+            key={activeCollectionId ? `col-${activeCollectionId}` : `tab-${activeTab}`}
+            className="view-enter"
+          >
+            {activeCollectionId ? (
+              <CollectionView
+                collectionId={activeCollectionId}
+                onBack={() => navigateTab(activeTab)}
+                onOpenCollection={navigateCollection}
+                onAddToPlaylist={setPlaylistModalTrack}
+              />
+            ) : activeTab === "home" ? (
+              <HomeView
+                onOpenCollection={navigateCollection}
+                onNavigateTab={navigateTab}
+                onAddToPlaylist={setPlaylistModalTrack}
+              />
+            ) : activeTab === "search" ? (
+              <SearchView
+                initialQuery={searchQuery}
+                onOpenCollection={navigateCollection}
+                onAddToPlaylist={setPlaylistModalTrack}
+                onImportedSpotify={(detail) => navigateCollection(detail.id)}
+              />
+            ) : activeTab === "explore" ? (
+              <ExploreView
+                onOpenCollection={navigateCollection}
+                onAddToPlaylist={setPlaylistModalTrack}
+              />
+            ) : activeTab === "settings" ? (
+              <SettingsView />
+            ) : (
+              <LibraryView
+                onOpenCollection={navigateCollection}
+                onOpenSpotifyImport={() => setSpotifyModalOpen(true)}
+                onAddToPlaylist={setPlaylistModalTrack}
+              />
+            )}
+          </div>
 
           <footer
             style={{
@@ -222,9 +227,16 @@ function MeldWorkspace() {
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <BrandMark size={20} />
-              <span>Meld Open Music Web — Client-side audio engine inspired by FrancescoGrazioso/Meld</span>
+              <span>Meld Web v2.1 — Studio Music Player &amp; Lyrics Suite</span>
             </div>
-            <span>Crafted by rhmt ofc — Local privacy first</span>
+            <a
+              href="https://rhmt.biz.id/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontWeight: 600, color: "var(--ink-secondary)" }}
+            >
+              Crafted by Rohmatulloh (RHMT OFC) · rhmt.biz.id
+            </a>
           </footer>
         </main>
       </div>
@@ -238,7 +250,10 @@ function MeldWorkspace() {
         onSelectTab={navigateTab}
       />
 
-      <NowPlayingOverlay onAddToPlaylist={setPlaylistModalTrack} />
+      <NowPlayingOverlay
+        onAddToPlaylist={setPlaylistModalTrack}
+        onOpenFullSettings={() => navigateTab("settings")}
+      />
 
       <SpotifyImportModal
         open={spotifyModalOpen}
@@ -264,6 +279,7 @@ function MeldWorkspace() {
       <QuickSettingsModal
         open={quickSettingsOpen}
         onClose={() => setQuickSettingsOpen(false)}
+        onOpenFullSettings={() => navigateTab("settings")}
       />
     </div>
   );

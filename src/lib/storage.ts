@@ -6,6 +6,7 @@ import type {
   ThemePreference,
   Track,
 } from "../types/music";
+import { DEFAULT_EQ_SETTINGS } from "./audioDsp";
 
 const KEYS = {
   liked: "meld:liked_tracks:v1",
@@ -29,7 +30,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   lyricsProgressiveBlur: true,
   lyricsAutoScroll: true,
   lyricsOffsetMs: 0,
+  lyricsTranslateLang: "id",
   playbackRate: 1,
+  pitchSemitones: 0,
+  pitchSpeedLinked: true,
+  eq: DEFAULT_EQ_SETTINGS,
   skipSeconds: 10,
   autoContinueRadio: true,
   keepPausedOnChange: false,
@@ -93,10 +98,21 @@ export const storage = {
   getVolume: (): number => readJson<number>(KEYS.volume, 85),
   saveVolume: (v: number) => writeJson(KEYS.volume, v),
 
-  getSettings: (): AppSettings => ({
-    ...DEFAULT_APP_SETTINGS,
-    ...readJson<Partial<AppSettings>>(KEYS.settings, {}),
-  }),
+  getSettings: (): AppSettings => {
+    const saved = readJson<Partial<AppSettings>>(KEYS.settings, {});
+    return {
+      ...DEFAULT_APP_SETTINGS,
+      ...saved,
+      eq: {
+        ...DEFAULT_EQ_SETTINGS,
+        ...(saved.eq || {}),
+        bands:
+          Array.isArray(saved.eq?.bands) && saved.eq.bands.length === 5
+            ? (saved.eq.bands as [number, number, number, number, number])
+            : DEFAULT_EQ_SETTINGS.bands,
+      },
+    };
+  },
   saveSettings: (settings: AppSettings) => writeJson(KEYS.settings, settings),
 };
 

@@ -4,6 +4,8 @@ import {
   ArrowCounterClockwise,
   CaretDown,
   CircleNotch,
+  FilmStrip,
+  Gauge,
   Heart,
   List,
   Pause,
@@ -27,12 +29,17 @@ import { WaveformScrubber } from "./WaveformScrubber";
 import { NowPlayingLyrics } from "./NowPlayingLyrics";
 import { LyricsShareModal } from "./LyricsShareModal";
 import { QuickSettingsModal } from "./QuickSettingsModal";
+import { SpeedPitchModal } from "./SpeedPitchModal";
 
 interface NowPlayingOverlayProps {
   onAddToPlaylist: (track: Track) => void;
+  onOpenFullSettings?: () => void;
 }
 
-export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
+export function NowPlayingOverlay({
+  onAddToPlaylist,
+  onOpenFullSettings,
+}: NowPlayingOverlayProps) {
   const {
     currentTrack,
     playbackState,
@@ -40,6 +47,10 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
     duration,
     shuffle,
     repeat,
+    playbackRate,
+    pitchSemitones,
+    effectivePlaybackRate,
+    eq,
     lyrics,
     lyricsLoading,
     nowPlayingOpen,
@@ -61,16 +72,20 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
   const [mobileView, setMobileView] = useState<"playing" | "lyrics">("playing");
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [shareLyricsOpen, setShareLyricsOpen] = useState(false);
+  const [speedPitchOpen, setSpeedPitchOpen] = useState(false);
   const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     if (!nowPlayingOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setNowPlayingOpen(false);
+      // Do not dismiss Now Playing when a child dialog is open on top
+      if (e.key === "Escape" && !quickSettingsOpen && !shareLyricsOpen && !speedPitchOpen) {
+        setNowPlayingOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [nowPlayingOpen, setNowPlayingOpen]);
+  }, [nowPlayingOpen, quickSettingsOpen, shareLyricsOpen, speedPitchOpen, setNowPlayingOpen]);
 
   const isPlaying = playbackState === "playing";
   const isBuffering = playbackState === "buffering";
@@ -115,6 +130,16 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
     }
     return [];
   }, [lyrics]);
+
+  const currentLyricIndex = useMemo(() => {
+    if (!lyrics?.synced || !lyrics.lines || lyrics.lines.length === 0) return 0;
+    const offsetSeconds = settings.lyricsOffsetMs / 1000;
+    const eff = currentTime + offsetSeconds;
+    return lyrics.lines.reduce((acc, line, idx) => (line.time <= eff + 0.2 ? idx : acc), 0);
+  }, [lyrics, currentTime, settings.lyricsOffsetMs]);
+
+  const hasDspModification =
+    Math.abs(playbackRate - 1) > 0.01 || Math.abs(pitchSemitones) > 0.01 || eq.enabled;
 
   const handleCopyLyrics = () => {
     const text = lyrics?.plainText || lyrics?.lines?.map((l) => l.text).join("\n");
@@ -219,7 +244,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
             </div>
           ) : (
             <div
-              className="np-cover"
+              className={`np-cover${isPlaying ? " is-playing" : " is-paused"}`}
               onTouchStart={handleSwipeStart}
               onTouchEnd={handleSwipeEnd}
             >
@@ -333,7 +358,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
             </button>
           </div>
 
-          {/* Secondary Utility Actions (Anchors Bottom of Deck & Eliminates Dead Space) */}
+          {/* Secondary Utility Actions (Speed & Pitch, Lyrics Video Studio, Seek & Radio) */}
           <div className="np-secondary-actions">
             <button
               type="button"
@@ -348,13 +373,39 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
 
             <button
               type="button"
+              className={`np-action-pill${hasDspModification ? " is-active" : ""}`}
+              onClick={() => setSpeedPitchOpen(true)}
+              title="Kontrol Kecepatan, Nada & Equalizer"
+              aria-label="Buka Kontrol Kecepatan, Nada dan Equalizer"
+            >
+              <Gauge size={14} weight="bold" />
+              <span>
+                {playbackRate.toFixed(2).replace(/\.00$/, "")}x
+                {pitchSemitones !== 0 ? ` · ${pitchSemitones > 0 ? `+${pitchSemitones}` : pitchSemitones}st` : ""}
+                {eq.enabled ? " · EQ" : ""}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="np-action-pill"
+              onClick={() => setShareLyricsOpen(true)}
+              title="Studio Video & Kartu Lirik"
+              aria-label="Buka Studio Video Lirik"
+            >
+              <FilmStrip size={14} weight="bold" />
+              <span>Video</span>
+            </button>
+
+            <button
+              type="button"
               className="np-action-pill"
               onClick={() => void startRadioFromTrack(currentTrack)}
               title="Mulai Radio Mix"
               aria-label="Mulai Radio Mix"
             >
               <Radio size={14} weight="bold" />
-              <span>Radio Mix</span>
+              <span>Radio</span>
             </button>
 
             <button
@@ -377,6 +428,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
           lyricsLoading={lyricsLoading}
           currentTime={currentTime}
           playbackState={playbackState}
+          playbackRate={effectivePlaybackRate}
           lyricsFontSize={settings.lyricsFontSize}
           lyricsAlign={settings.lyricsAlign}
           lyricsAutoScroll={settings.lyricsAutoScroll}
@@ -389,21 +441,36 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
         />
       </div>
 
-      {/* Share Lyrics Modal */}
+      {/* Lyrics Card & Video Studio Modal */}
       {currentTrack && (
         <LyricsShareModal
           open={shareLyricsOpen}
           onClose={() => setShareLyricsOpen(false)}
           track={currentTrack}
           lines={lyricLinesForShare}
-          initialIndex={0}
+          initialIndex={Math.max(0, currentLyricIndex)}
         />
       )}
 
-      {/* Unified Settings & Controls Modal (Controls, Queue, Palette, Volume) */}
+      {/* Compact Speed, Pitch & Equalizer Popup Dialog */}
+      <SpeedPitchModal
+        open={speedPitchOpen}
+        onClose={() => setSpeedPitchOpen(false)}
+      />
+
+      {/* Unified Settings & Controls Modal (Kontrol, EQ & DSP, Antrean, Info) */}
       <QuickSettingsModal
         open={quickSettingsOpen}
         onClose={() => setQuickSettingsOpen(false)}
+        onOpenFullSettings={
+          onOpenFullSettings
+            ? () => {
+                setQuickSettingsOpen(false);
+                setNowPlayingOpen(false);
+                onOpenFullSettings();
+              }
+            : undefined
+        }
       />
     </div>
   );
