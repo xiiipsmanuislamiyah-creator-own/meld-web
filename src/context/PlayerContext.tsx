@@ -173,6 +173,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         recordPlay(playable);
       }
 
+      if (!keepPaused) {
+        silentAudioRef.current?.play().catch(() => {});
+      }
       engineRef.current?.load(playable.videoId!, !keepPaused);
     },
     [notify, recordPlay, syncArtworkPalette],
@@ -239,8 +242,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!stateRef.current.currentTrack) return;
     if (st === "playing") {
       engineRef.current?.pause();
+      silentAudioRef.current?.pause();
       setPlaybackState("paused");
     } else {
+      silentAudioRef.current?.play().catch(() => {});
       engineRef.current?.play();
       setPlaybackState("playing");
     }
@@ -312,16 +317,51 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   // Silent background audio keep-alive (prevents browser/mobile sleeping or stopping audio on tab exit)
   useEffect(() => {
+    let createdUrl: string | null = null;
     try {
-      const audio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+      // Build a genuine, valid 1.5s silent PCM WAV audio element so mobile Chrome & Safari
+      // treat the tab as an active foreground audio playback session and never pause on tab exit/lockscreen
+      const sampleRate = 8000;
+      const numChannels = 1;
+      const bitsPerSample = 16;
+      const durationSec = 1.5;
+      const numSamples = Math.floor(sampleRate * durationSec);
+      const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+      const blockAlign = numChannels * (bitsPerSample / 8);
+      const dataSize = numSamples * (bitsPerSample / 8);
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+
+      const writeStr = (offset: number, str: string) => {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+      };
+
+      writeStr(0, "RIFF");
+      view.setUint32(4, 36 + dataSize, true);
+      writeStr(8, "WAVE");
+      writeStr(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true); // PCM
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, byteRate, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, bitsPerSample, true);
+      writeStr(36, "data");
+      view.setUint32(40, dataSize, true);
+
+      const blob = new Blob([buffer], { type: "audio/wav" });
+      createdUrl = URL.createObjectURL(blob);
+      const audio = new Audio(createdUrl);
       audio.loop = true;
-      audio.volume = 0.001;
+      audio.volume = 0.0001;
       silentAudioRef.current = audio;
     } catch (_) {}
 
     return () => {
       silentAudioRef.current?.pause();
       silentAudioRef.current = null;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {});
         wakeLockRef.current = null;
@@ -334,6 +374,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const handleVisibility = () => {
       if (stateRef.current.playbackState === "playing") {
         silentAudioRef.current?.play().catch(() => {});
+        engineRef.current?.play();
         if (document.visibilityState === "visible" && "wakeLock" in navigator && !wakeLockRef.current) {
           (navigator as any).wakeLock?.request("screen").then((wl: any) => {
             wakeLockRef.current = wl;
@@ -342,7 +383,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    const handleFocus = () => {
+      if (stateRef.current.playbackState === "playing") {
+        engineRef.current?.play();
+        silentAudioRef.current?.play().catch(() => {});
+      }
+    };
+
     document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", handleVisibility);
+    window.addEventListener("focus", handleFocus);
 
     if (playbackState === "playing") {
       silentAudioRef.current?.play().catch(() => {});
@@ -361,6 +411,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handleVisibility);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [playbackState]);
 

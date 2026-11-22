@@ -86,6 +86,7 @@ export class YouTubeAudioEngine {
   private pendingRate = 1;
   private pollTimer: number | null = null;
   private callbacks: EngineCallbacks;
+  private userPaused = false;
 
   constructor(callbacks: EngineCallbacks) {
     this.callbacks = callbacks;
@@ -127,9 +128,28 @@ export class YouTubeAudioEngine {
           const PS = window.YT?.PlayerState;
           if (!PS) return;
           if (ev.data === PS.PLAYING) {
+            this.userPaused = false;
             this.player?.setPlaybackRate?.(this.pendingRate);
             this.callbacks.onStateChange("playing");
           } else if (ev.data === PS.PAUSED) {
+            // Check if pause occurred while tab is hidden (browser tab switch, minimize, or screen lock)
+            const isTabHidden =
+              typeof document !== "undefined" &&
+              (document.hidden || document.visibilityState === "hidden");
+            if (!this.userPaused && isTabHidden) {
+              // Automatically re-assert playback so music does not stop when exiting web
+              try {
+                this.player?.playVideo();
+              } catch (_) {}
+              setTimeout(() => {
+                if (!this.userPaused && this.player) {
+                  try {
+                    this.player.playVideo();
+                  } catch (_) {}
+                }
+              }, 120);
+              return;
+            }
             this.callbacks.onStateChange("paused");
           } else if (ev.data === PS.BUFFERING) {
             this.callbacks.onStateChange("buffering");
@@ -159,6 +179,7 @@ export class YouTubeAudioEngine {
   }
 
   load(videoId: string, autoplay = true): void {
+    if (autoplay) this.userPaused = false;
     if (!this.ready || !this.player) {
       this.pendingVideoId = { id: videoId, autoplay };
       return;
@@ -171,12 +192,14 @@ export class YouTubeAudioEngine {
   }
 
   play(): void {
+    this.userPaused = false;
     if (this.ready && this.player) {
       this.player.playVideo();
     }
   }
 
   pause(): void {
+    this.userPaused = true;
     if (this.ready && this.player) {
       this.player.pauseVideo();
     }

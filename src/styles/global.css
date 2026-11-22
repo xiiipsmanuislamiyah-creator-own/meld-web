@@ -958,10 +958,100 @@ img {
   flex: 1;
   border-radius: 999px;
   min-width: 2px;
+  transform-origin: center;
   transition:
     transform var(--dur-fast) var(--ease-out-snappy),
     opacity var(--dur-fast) var(--ease-out-snappy),
     background-color var(--dur-fast) var(--ease-out-snappy);
+}
+
+/* === Live Dynamic Rhythm Motion Following Music Beat === */
+@keyframes waveformBeatBass {
+  0%, 100% {
+    transform: scaleY(0.42);
+  }
+  22% {
+    transform: scaleY(1.3);
+  }
+  48% {
+    transform: scaleY(0.58);
+  }
+  72% {
+    transform: scaleY(1.15);
+  }
+  86% {
+    transform: scaleY(0.5);
+  }
+}
+
+@keyframes waveformBeatMid {
+  0%, 100% {
+    transform: scaleY(0.85);
+  }
+  30% {
+    transform: scaleY(0.36);
+  }
+  60% {
+    transform: scaleY(1.24);
+  }
+  82% {
+    transform: scaleY(0.56);
+  }
+}
+
+@keyframes waveformBeatHi {
+  0%, 100% {
+    transform: scaleY(0.52);
+  }
+  24% {
+    transform: scaleY(1.16);
+  }
+  50% {
+    transform: scaleY(0.42);
+  }
+  76% {
+    transform: scaleY(1.22);
+  }
+}
+
+@keyframes waveformBeatTreble {
+  0%, 100% {
+    transform: scaleY(0.68);
+  }
+  34% {
+    transform: scaleY(1.26);
+  }
+  56% {
+    transform: scaleY(0.46);
+  }
+  84% {
+    transform: scaleY(1.12);
+  }
+}
+
+.waveform-bar.is-dancing {
+  will-change: transform;
+}
+
+.waveform-bar.rhythm-0 {
+  animation: waveformBeatBass 0.88s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.waveform-bar.rhythm-1 {
+  animation: waveformBeatMid 0.74s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.waveform-bar.rhythm-2 {
+  animation: waveformBeatHi 0.65s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.waveform-bar.rhythm-3 {
+  animation: waveformBeatTreble 0.82s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.waveform-bar.is-active-pulse {
+  box-shadow: 0 0 10px var(--accent-soft);
+  filter: brightness(1.25);
 }
 
 .waveform-track:hover .waveform-bar {
@@ -1258,13 +1348,23 @@ img {
 
 .lyric-line.is-current {
   color: var(--ink);
-  font-size: 1.22rem;
+  font-size: 1.24rem;
   font-weight: 700;
   background: var(--surface-active);
   border-left-color: var(--accent);
   box-shadow: 0 4px 18px -4px var(--accent-soft);
   transform: scale(1.02);
   transform-origin: left center;
+}
+
+.lyric-line.is-past {
+  opacity: 0.65;
+  color: var(--ink-secondary);
+}
+
+.lyric-line.is-future {
+  opacity: 0.38;
+  color: var(--ink-muted);
 }
 
 .lyric-line-content {
@@ -1289,25 +1389,40 @@ img {
   position: relative;
   display: inline-block;
   min-width: 0;
+  line-height: 1.48;
 }
 
-.lyric-text-base {
-  display: inline-block;
-  color: inherit;
-  transition: color 0.15s ease;
+/* === Word-by-Word Rhythm Karaoke System (Multi-line Safe) === */
+.karaoke-line-words {
+  display: inline;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
-.lyric-text-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  overflow: hidden;
-  white-space: nowrap;
+.karaoke-word-container {
+  display: inline;
+  white-space: normal;
+}
+
+.karaoke-word {
+  display: inline;
+  transition: color 0.12s ease, text-shadow 0.12s ease, opacity 0.12s ease;
+}
+
+.karaoke-word.is-sung {
   color: var(--accent);
-  text-shadow: 0 0 10px var(--accent-soft);
-  transition: width 0.2s cubic-bezier(0.1, 0.9, 0.2, 1);
-  pointer-events: none;
+  text-shadow: 0 0 12px var(--accent-soft);
+  font-weight: 700;
+}
+
+.karaoke-word.is-singing {
+  font-weight: 700;
+  will-change: background-position;
+}
+
+.karaoke-word.is-upcoming {
+  color: var(--ink-muted);
+  opacity: 0.42;
 }
 
 .lyric-sync-btn {
@@ -1705,14 +1820,16 @@ img {
 /* === Non-Occluded In-Viewport YouTube IFrame Host + Video Stage === */
 .yt-audio-host {
   position: fixed;
-  width: 200px;
-  height: 112px;
-  right: 8px;
-  bottom: 8px;
-  opacity: 0.012;
+  width: 240px;
+  height: 135px;
+  right: 6px;
+  bottom: 6px;
+  opacity: 0.06;
   pointer-events: none;
   z-index: 0;
   overflow: hidden;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .yt-audio-host.is-video-stage {

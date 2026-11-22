@@ -158,6 +158,7 @@ export function PlayerDock() {
             onSeek={seekTo}
             variant="dock"
             barCount={48}
+            isPlaying={isPlaying}
           />
         </div>
 

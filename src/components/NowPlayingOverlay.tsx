@@ -271,6 +271,7 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
             onSeek={seekTo}
             variant="hero"
             barCount={56}
+            isPlaying={isPlaying}
           />
 
           <div className="np-transport">

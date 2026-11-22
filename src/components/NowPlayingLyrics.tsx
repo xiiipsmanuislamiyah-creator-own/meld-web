@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Copy,
   ImageSquare,
@@ -9,6 +9,26 @@ import {
 } from "@phosphor-icons/react";
 import type { LyricsPayload, Track } from "../types/music";
 import { EqualizerBars } from "./EqualizerBars";
+
+interface TimedWord {
+  text: string;
+  startFrac: number;
+  endFrac: number;
+}
+
+function parseLineWords(text: string): TimedWord[] {
+  const rawWords = text.trim().split(/\s+/).filter(Boolean);
+  if (rawWords.length === 0) return [];
+  const weights = rawWords.map((w) => Math.max(2, w.length));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  return rawWords.map((w, idx) => {
+    const startFrac = acc / total;
+    acc += weights[idx];
+    const endFrac = acc / total;
+    return { text: w, startFrac, endFrac };
+  });
+}
 
 interface NowPlayingLyricsProps {
   currentTrack: Track;
@@ -47,14 +67,41 @@ export function NowPlayingLyrics({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [scrolledAway, setScrolledAway] = useState(false);
 
+  // 60 FPS interpolated clock for fluid karaoke text sweep following music rhythm
+  const [smoothTime, setSmoothTime] = useState(currentTime);
+  const syncRef = useRef({ time: currentTime, stamp: performance.now() });
+
+  useEffect(() => {
+    syncRef.current = { time: currentTime, stamp: performance.now() };
+    setSmoothTime(currentTime);
+  }, [currentTime]);
+
+  useEffect(() => {
+    if (playbackState !== "playing") return;
+    let rafId: number;
+    const loop = () => {
+      const elapsed = (performance.now() - syncRef.current.stamp) / 1000;
+      setSmoothTime(syncRef.current.time + Math.min(0.4, elapsed));
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, [playbackState]);
+
   const offsetSeconds = lyricsOffsetMs / 1000;
-  const effectiveTime = currentTime + offsetSeconds;
+  const effectiveTime = smoothTime + offsetSeconds;
 
   const activeLyricIndex = useMemo(() => {
     if (!lyrics?.synced || !lyrics.lines || lyrics.lines.length === 0) return -1;
-    return lyrics.lines.reduce((acc, line, idx) => {
-      return line.time <= effectiveTime + 0.35 ? idx : acc;
-    }, -1);
+    let activeIdx = -1;
+    for (let i = 0; i < lyrics.lines.length; i++) {
+      if (lyrics.lines[i].time <= effectiveTime + 0.12) {
+        activeIdx = i;
+      } else {
+        break;
+      }
+    }
+    return activeIdx;
   }, [lyrics, effectiveTime]);
 
   // Centering auto-scroll with smooth animation
@@ -197,12 +244,14 @@ export function NowPlayingLyrics({
             overflowY: "auto",
             display: "flex",
             flexDirection: "column",
-            gap: 6,
+            gap: 8,
             padding: "8px 4px 40px",
           }}
         >
           {lyrics.lines.map((line, i) => {
             const isCurrent = i === activeLyricIndex;
+            const isPast = activeLyricIndex >= 0 && i < activeLyricIndex;
+            const isFuture = activeLyricIndex >= 0 && i > activeLyricIndex;
             const distance = activeLyricIndex >= 0 ? Math.abs(i - activeLyricIndex) : 0;
             const blurPx =
               lyricsProgressiveBlur && activeLyricIndex >= 0 && !isCurrent
@@ -210,25 +259,29 @@ export function NowPlayingLyrics({
                 : 0;
             const opacity =
               activeLyricIndex >= 0 && !isCurrent
-                ? Math.max(0.32, 1 - distance * 0.14)
+                ? Math.max(0.35, 1 - distance * 0.15)
                 : 1;
 
-            // Accurate karaoke rhythm sweep calculation
-            let sweepPct = 0;
+            const words = parseLineWords(line.text);
+
+            // Accurate karaoke rhythm sweep calculation across line duration
+            let lineProgress = 0;
             if (isCurrent) {
               const lineStart = line.time;
-              const lineEnd = lyrics.lines[i + 1]?.time ?? (lineStart + 3.8);
-              const dur = Math.max(0.5, lineEnd - lineStart);
-              const progress = Math.max(0, Math.min(1, (effectiveTime - lineStart) / dur));
-              sweepPct = Math.round(progress * 100);
+              const nextStart = lyrics.lines[i + 1]?.time;
+              const lineEnd = nextStart ? nextStart : lineStart + Math.max(3.0, line.text.length * 0.14);
+              const dur = Math.max(0.6, lineEnd - lineStart);
+              lineProgress = Math.max(0, Math.min(1, (effectiveTime - lineStart) / dur));
             }
+
+            const stateClass = isCurrent ? " is-current" : isPast ? " is-past" : isFuture ? " is-future" : "";
 
             return (
               <button
                 key={`${line.time}-${i}`}
                 ref={isCurrent ? activeLyricRef : null}
                 type="button"
-                className={`lyric-line${isCurrent ? " is-current" : ""}`}
+                className={`lyric-line${stateClass}`}
                 style={{
                   fontSize: isCurrent ? `${lyricsFontSize + 3}px` : `${lyricsFontSize}px`,
                   textAlign: lyricsAlign,
@@ -244,15 +297,51 @@ export function NowPlayingLyrics({
                     </div>
                   )}
                   <div className="lyric-text-wrapper" style={{ flex: 1, textAlign: lyricsAlign }}>
-                    <span className="lyric-text-base">{line.text}</span>
-                    {isCurrent && (
-                      <span
-                        className="lyric-text-fill"
-                        style={{ width: `${sweepPct}%` }}
-                      >
-                        {line.text}
-                      </span>
-                    )}
+                    <div className="karaoke-line-words" style={{ textAlign: lyricsAlign }}>
+                      {words.map((w, wIdx) => {
+                        let wordStatus: "sung" | "singing" | "upcoming" = "upcoming";
+                        let wordSweepPct = 0;
+
+                        if (!isCurrent) {
+                          wordStatus = isPast ? "sung" : "upcoming";
+                        } else {
+                          if (lineProgress >= w.endFrac) {
+                            wordStatus = "sung";
+                          } else if (lineProgress <= w.startFrac) {
+                            wordStatus = "upcoming";
+                          } else {
+                            wordStatus = "singing";
+                            const span = Math.max(0.001, w.endFrac - w.startFrac);
+                            wordSweepPct = Math.max(
+                              0,
+                              Math.min(100, ((lineProgress - w.startFrac) / span) * 100),
+                            );
+                          }
+                        }
+
+                        const singingStyle: React.CSSProperties =
+                          wordStatus === "singing"
+                            ? {
+                                background: `linear-gradient(90deg, var(--accent) 0%, var(--accent) ${wordSweepPct.toFixed(1)}%, rgba(255, 255, 255, 0.42) ${wordSweepPct.toFixed(1)}%, rgba(255, 255, 255, 0.42) 100%)`,
+                                WebkitBackgroundClip: "text",
+                                WebkitTextFillColor: "transparent",
+                                textShadow: "0 0 12px var(--accent-soft)",
+                              }
+                            : {};
+
+                        return (
+                          <span key={wIdx} className="karaoke-word-container">
+                            <span
+                              className={`karaoke-word is-${wordStatus}`}
+                              style={singingStyle}
+                            >
+                              {w.text}
+                            </span>
+                            {wIdx < words.length - 1 ? " " : ""}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </button>

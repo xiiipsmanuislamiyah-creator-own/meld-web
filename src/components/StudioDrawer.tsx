@@ -1,20 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
   CircleNotch,
-  Copy,
-  ImageSquare,
-  Lightning,
   ListPlus,
   MagnifyingGlass,
   MicrophoneStage,
-  Minus,
   Moon,
   Palette,
   Play,
-  Plus,
   Queue,
   Shuffle,
   Sparkle,
@@ -30,6 +25,7 @@ import { useToast } from "../context/ToastContext";
 import { Artwork } from "./Artwork";
 import { EqualizerBars } from "./EqualizerBars";
 import { LyricsShareModal } from "./LyricsShareModal";
+import { NowPlayingLyrics } from "./NowPlayingLyrics";
 import { formatTime } from "../lib/waveform";
 import { fetchUpNextRadio, searchCatalog } from "../lib/api";
 import type { Track } from "../types/music";
@@ -79,21 +75,9 @@ export function StudioDrawer({
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [catalogResults, setCatalogResults] = useState<Track[]>([]);
   const [catalogSearching, setCatalogSearching] = useState(false);
-  const [scrolledAway, setScrolledAway] = useState(false);
 
   const activeTab = activeTabOverride ?? drawerTab;
   const setTab = onTabChangeOverride ?? setDrawerTab;
-
-  const activeLyricRef = useRef<HTMLButtonElement | null>(null);
-  const lyricsScrollContainerRef = useRef<HTMLDivElement | null>(null);
-
-  const offsetSeconds = settings.lyricsOffsetMs / 1000;
-  const effectiveTime = currentTime + offsetSeconds;
-
-  const activeLyricIndex =
-    lyrics?.synced && lyrics.lines.length > 0
-      ? lyrics.lines.reduce((acc, line, idx) => (line.time <= effectiveTime + 0.35 ? idx : acc), -1)
-      : -1;
 
   // Auto-fetch Candidate Tracks (Rekomendasi Kandidat Selanjutnya)
   useEffect(() => {
@@ -155,30 +139,6 @@ export function StudioDrawer({
     return () => clearTimeout(timer);
   }, [queueFilter, activeTab]);
 
-  useEffect(() => {
-    if (activeTab === "lyrics" && settings.lyricsAutoScroll && activeLyricRef.current) {
-      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      activeLyricRef.current.scrollIntoView({
-        block: "center",
-        behavior: prefersReduced ? "auto" : "smooth",
-      });
-      setScrolledAway(false);
-    }
-  }, [activeLyricIndex, activeTab, settings.lyricsAutoScroll]);
-
-  // Detect manual user scrolling on lyrics container
-  const handleLyricsScroll = () => {
-    if (!activeLyricRef.current || !lyricsScrollContainerRef.current) return;
-    const container = lyricsScrollContainerRef.current;
-    const activeEl = activeLyricRef.current;
-    const containerRect = container.getBoundingClientRect();
-    const activeRect = activeEl.getBoundingClientRect();
-    const isOutOfCenter =
-      activeRect.bottom < containerRect.top + 50 ||
-      activeRect.top > containerRect.bottom - 50;
-    setScrolledAway(isOutOfCenter);
-  };
-
   const filteredQueueEntries = useMemo(() => {
     const q = queueFilter.trim().toLowerCase();
     return queue
@@ -205,6 +165,13 @@ export function StudioDrawer({
     }
     return [];
   }, [lyrics]);
+
+  const currentLyricIndex = useMemo(() => {
+    if (!lyrics?.synced || !lyrics.lines || lyrics.lines.length === 0) return 0;
+    const offsetSeconds = settings.lyricsOffsetMs / 1000;
+    const eff = currentTime + offsetSeconds;
+    return lyrics.lines.reduce((acc, line, idx) => (line.time <= eff + 0.2 ? idx : acc), 0);
+  }, [lyrics, currentTime, settings.lyricsOffsetMs]);
 
   const handleCopyLyrics = () => {
     const text = lyrics?.plainText || lyrics?.lines.map((l) => l.text).join("\n");
@@ -270,231 +237,32 @@ export function StudioDrawer({
 
       <div className="drawer-body">
         {activeTab === "lyrics" && (
-          <>
-            {!currentTrack ? (
-              <div className="state-panel" style={{ padding: "28px 16px" }}>
-                <MicrophoneStage size={28} weight="duotone" style={{ color: "var(--ink-muted)" }} />
-                <p style={{ fontWeight: 600 }}>No track playing yet</p>
-                <p style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)" }}>
-                  Pick any song to load line-synced karaoke lyrics automatically.
-                </p>
-              </div>
-            ) : lyricsLoading ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 6 }}>
-                <div className="skeleton-box" style={{ height: 22, width: "86%" }} />
-                <div className="skeleton-box" style={{ height: 22, width: "70%" }} />
-                <div className="skeleton-box" style={{ height: 22, width: "92%" }} />
-                <div className="skeleton-box" style={{ height: 22, width: "64%" }} />
-              </div>
-            ) : lyrics?.found && lyrics.synced ? (
-              <div style={{ position: "relative", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "0 4px 8px" }}>
-                  <span style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)" }}>
-                    Synced via {lyrics.source === "ytmusic" ? "YTMusic" : "LRCLIB"}
-                  </span>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    {/* Sync Offset Control */}
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 2,
-                        padding: "2px 6px",
-                        borderRadius: "var(--radius-pill)",
-                        background: "var(--surface-raised)",
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "0.7rem",
-                      }}
-                      title="Lyrics timing sync offset"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => shiftLyricsOffset(-100)}
-                        aria-label="Delay lyrics by 100ms"
-                        style={{ padding: "2px 4px", display: "inline-flex" }}
-                      >
-                        <Minus size={11} weight="bold" />
-                      </button>
-                      <span style={{ minWidth: 42, textAlign: "center" }}>
-                        {settings.lyricsOffsetMs > 0 ? `+${settings.lyricsOffsetMs}` : settings.lyricsOffsetMs}ms
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => shiftLyricsOffset(100)}
-                        aria-label="Advance lyrics by 100ms"
-                        style={{ padding: "2px 4px", display: "inline-flex" }}
-                      >
-                        <Plus size={11} weight="bold" />
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      style={{ width: 32, height: 32 }}
-                      onClick={() => setShareOpen(true)}
-                      aria-label="Create lyrics share card"
-                      title="Share Lyrics Card"
-                    >
-                      <ImageSquare size={16} />
-                    </button>
-
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      style={{ width: 32, height: 32 }}
-                      onClick={handleCopyLyrics}
-                      aria-label="Copy all lyrics"
-                      title="Copy lyrics"
-                    >
-                      <Copy size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Lyrics Lines with Rhythm Synchronization & Karaoke Sweep */}
-                <div
-                  ref={lyricsScrollContainerRef}
-                  onScroll={handleLyricsScroll}
-                  className="lyrics-lines-container"
-                  style={{
-                    overflowY: "auto",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                    padding: "4px 2px 24px",
-                  }}
-                >
-                  {lyrics.lines.map((line, i) => {
-                    const isCurrent = i === activeLyricIndex;
-                    const distance = activeLyricIndex >= 0 ? Math.abs(i - activeLyricIndex) : 0;
-                    const blurPx =
-                      settings.lyricsProgressiveBlur && activeLyricIndex >= 0 && !isCurrent
-                        ? Math.min(2.4, distance * 0.45)
-                        : 0;
-                    const opacity =
-                      activeLyricIndex >= 0 && !isCurrent
-                        ? Math.max(0.34, 1 - distance * 0.14)
-                        : 1;
-
-                    // Modern rhythm sweep percent calculation
-                    let sweepPct = 0;
-                    if (isCurrent) {
-                      const lineStart = line.time;
-                      const lineEnd = lyrics.lines[i + 1]?.time ?? (lineStart + 3.8);
-                      const dur = Math.max(0.5, lineEnd - lineStart);
-                      const progress = Math.max(0, Math.min(1, (effectiveTime - lineStart) / dur));
-                      sweepPct = Math.round(progress * 100);
-                    }
-
-                    return (
-                      <button
-                        key={`${line.time}-${i}`}
-                        ref={isCurrent ? activeLyricRef : null}
-                        type="button"
-                        className={`lyric-line${isCurrent ? " is-current" : ""}`}
-                        style={{
-                          fontSize: isCurrent
-                            ? `${settings.lyricsFontSize + 3}px`
-                            : `${settings.lyricsFontSize}px`,
-                          textAlign: settings.lyricsAlign,
-                          filter: blurPx > 0 ? `blur(${blurPx.toFixed(2)}px)` : undefined,
-                          opacity,
-                        }}
-                        onClick={() => seekTo(Math.max(0, line.time - offsetSeconds))}
-                      >
-                        <div className="lyric-line-content">
-                          {isCurrent && (
-                            <div className="lyric-rhythm-badge" title="Rhythm Active">
-                              <EqualizerBars paused={playbackState !== "playing"} />
-                            </div>
-                          )}
-                          <div className="lyric-text-wrapper">
-                            <span className="lyric-text-base">{line.text}</span>
-                            {isCurrent && (
-                              <span
-                                className="lyric-text-fill"
-                                style={{ width: `${sweepPct}%` }}
-                              >
-                                {line.text}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Floating Re-Sync Button if User Scrolled Away */}
-                {scrolledAway && activeLyricIndex >= 0 && (
-                  <button
-                    type="button"
-                    className="lyric-sync-btn"
-                    onClick={() => {
-                      activeLyricRef.current?.scrollIntoView({
-                        block: "center",
-                        behavior: "smooth",
-                      });
-                      setScrolledAway(false);
-                    }}
-                    aria-label="Kembali ke lirik aktif"
-                  >
-                    <Lightning size={14} weight="fill" />
-                    <span>Sinkron Lirik</span>
-                  </button>
-                )}
-              </div>
-            ) : lyrics?.found && lyrics.plainText ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                  <span style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)" }}>
-                    Plain lyrics ({lyrics.source === "ytmusic" ? "YTMusic" : "LRCLIB"})
-                  </span>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      style={{ minHeight: 32, padding: "0 10px", fontSize: "0.78rem" }}
-                      onClick={() => setShareOpen(true)}
-                    >
-                      <ImageSquare size={15} /> Card
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      style={{ minHeight: 32, padding: "0 10px", fontSize: "0.78rem" }}
-                      onClick={handleCopyLyrics}
-                    >
-                      <Copy size={15} /> Copy
-                    </button>
-                  </div>
-                </div>
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    fontFamily: "var(--font-body)",
-                    fontSize: `${Math.max(15, settings.lyricsFontSize - 2)}px`,
-                    textAlign: settings.lyricsAlign,
-                    lineHeight: 1.7,
-                    color: "var(--ink-secondary)",
-                  }}
-                >
-                  {lyrics.plainText}
-                </pre>
-              </div>
-            ) : (
-              <div className="state-panel" style={{ padding: "28px 16px" }}>
-                <MicrophoneStage size={28} weight="duotone" style={{ color: "var(--ink-muted)" }} />
-                <p style={{ fontWeight: 600 }}>Instrumental or lyrics unavailable</p>
-                <p style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)" }}>
-                  No synced lyrics entry found for "{currentTrack.title}".
-                </p>
-              </div>
-            )}
-          </>
+          currentTrack ? (
+            <NowPlayingLyrics
+              currentTrack={currentTrack}
+              lyrics={lyrics}
+              lyricsLoading={lyricsLoading}
+              currentTime={currentTime}
+              playbackState={playbackState}
+              lyricsFontSize={settings.lyricsFontSize}
+              lyricsAlign={settings.lyricsAlign}
+              lyricsAutoScroll={settings.lyricsAutoScroll}
+              lyricsProgressiveBlur={settings.lyricsProgressiveBlur}
+              lyricsOffsetMs={settings.lyricsOffsetMs}
+              onShiftOffset={shiftLyricsOffset}
+              onSeek={seekTo}
+              onOpenShareModal={() => setShareOpen(true)}
+              onCopyLyrics={handleCopyLyrics}
+            />
+          ) : (
+            <div className="state-panel" style={{ padding: "28px 16px" }}>
+              <MicrophoneStage size={28} weight="duotone" style={{ color: "var(--ink-muted)" }} />
+              <p style={{ fontWeight: 600 }}>No track playing yet</p>
+              <p style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)" }}>
+                Pick any song to load line-synced karaoke lyrics automatically.
+              </p>
+            </div>
+          )
         )}
 
         {activeTab === "queue" && (
@@ -985,7 +753,7 @@ export function StudioDrawer({
           onClose={() => setShareOpen(false)}
           track={currentTrack}
           lines={lyricLinesForShare}
-          initialIndex={Math.max(0, activeLyricIndex)}
+          initialIndex={Math.max(0, currentLyricIndex)}
         />
       )}
     </>

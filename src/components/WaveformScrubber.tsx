@@ -8,6 +8,7 @@ interface WaveformScrubberProps {
   onSeek: (seconds: number) => void;
   variant?: "hero" | "dock";
   barCount?: number;
+  isPlaying?: boolean;
 }
 
 export function WaveformScrubber({
@@ -17,6 +18,7 @@ export function WaveformScrubber({
   onSeek,
   variant = "hero",
   barCount = 58,
+  isPlaying = false,
 }: WaveformScrubberProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [hoverRatio, setHoverRatio] = useState<number | null>(null);
@@ -130,13 +132,20 @@ export function WaveformScrubber({
                 : "var(--border-control)";
           }
 
+          const isNearPlayhead = Math.abs(barPos - activeRatio) < 0.035;
+          const rhythmClass = isPlaying
+            ? ` is-dancing rhythm-${i % 4}${isNearPlayhead ? " is-active-pulse" : ""}`
+            : "";
+          const animDelay = isPlaying ? `-${((i * 0.11) % 0.88).toFixed(2)}s` : undefined;
+
           return (
             <span
               key={i}
-              className="waveform-bar"
+              className={`waveform-bar${rhythmClass}`}
               style={{
                 height: `${heightPct}%`,
                 backgroundColor: bg,
+                animationDelay: animDelay,
               }}
             />
           );
