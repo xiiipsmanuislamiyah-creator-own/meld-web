@@ -310,7 +310,7 @@ export function QuickSettingsModal({
                 </div>
 
                 {/* Stepper with - and + */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -318,9 +318,10 @@ export function QuickSettingsModal({
                     onClick={() => handleSpeedChange(-0.1)}
                     disabled={playbackRate <= 0.5}
                     aria-label="Perlambat suara (-0.1x)"
-                    title="Perlambat suara"
+                    title="Perlambat suara (-0.1x)"
                   >
-                    <Minus size={18} weight="bold" /> Perlambat
+                    <Minus size={18} weight="bold" />
+                    <span>-0.1x</span>
                   </button>
 
                   <button
@@ -328,13 +329,14 @@ export function QuickSettingsModal({
                     className="btn btn-ghost"
                     style={{
                       minHeight: 44,
-                      padding: "0 14px",
+                      padding: "0 10px",
                       fontFamily: "var(--font-mono)",
                       fontSize: "0.82rem",
                       fontWeight: 600,
+                      flexShrink: 0,
                     }}
                     onClick={() => setPlaybackRate(1.0)}
-                    title="Kembali ke kecepatan normal"
+                    title="Kembali ke kecepatan normal (1.0x)"
                   >
                     1.0x Normal
                   </button>
@@ -346,9 +348,10 @@ export function QuickSettingsModal({
                     onClick={() => handleSpeedChange(0.1)}
                     disabled={playbackRate >= 2.0}
                     aria-label="Percepat suara (+0.1x)"
-                    title="Percepat suara"
+                    title="Percepat suara (+0.1x)"
                   >
-                    <Plus size={18} weight="bold" /> Percepat
+                    <Plus size={18} weight="bold" />
+                    <span>+0.1x</span>
                   </button>
                 </div>
 

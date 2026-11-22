@@ -122,14 +122,14 @@ export function WaveformScrubber({
             bg = isPlayed
               ? "var(--dock-accent)"
               : isHoveredAhead
-                ? "rgba(255, 255, 255, 0.48)"
-                : "rgba(255, 255, 255, 0.22)";
+                ? "rgba(255, 255, 255, 0.55)"
+                : "rgba(255, 255, 255, 0.25)";
           } else {
             bg = isPlayed
               ? "var(--accent)"
               : isHoveredAhead
-                ? "var(--ink-secondary)"
-                : "var(--border-control)";
+                ? "color-mix(in srgb, var(--ink) 48%, transparent)"
+                : "color-mix(in srgb, var(--ink) 20%, transparent)";
           }
 
           const isNearPlayhead = Math.abs(barPos - activeRatio) < 0.035;

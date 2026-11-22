@@ -322,10 +322,10 @@ export function NowPlayingLyrics({
                         const singingStyle: React.CSSProperties =
                           wordStatus === "singing"
                             ? {
-                                background: `linear-gradient(90deg, var(--accent) 0%, var(--accent) ${wordSweepPct.toFixed(1)}%, rgba(255, 255, 255, 0.42) ${wordSweepPct.toFixed(1)}%, rgba(255, 255, 255, 0.42) 100%)`,
+                                background: `linear-gradient(90deg, var(--accent) 0%, var(--accent) ${wordSweepPct.toFixed(1)}%, color-mix(in srgb, var(--ink) 45%, transparent) ${wordSweepPct.toFixed(1)}%, color-mix(in srgb, var(--ink) 45%, transparent) 100%)`,
                                 WebkitBackgroundClip: "text",
                                 WebkitTextFillColor: "transparent",
-                                textShadow: "0 0 12px var(--accent-soft)",
+                                textShadow: "0 0 10px var(--accent-soft)",
                               }
                             : {};
 

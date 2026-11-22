@@ -1422,7 +1422,18 @@ img {
 
 .karaoke-word.is-upcoming {
   color: var(--ink-muted);
-  opacity: 0.42;
+  opacity: 0.45;
+}
+
+.lyric-line.is-current .karaoke-word.is-upcoming {
+  color: color-mix(in srgb, var(--ink) 48%, transparent);
+  opacity: 1;
+}
+
+.lyric-line.is-current .karaoke-word.is-sung {
+  color: var(--accent);
+  text-shadow: 0 0 12px var(--accent-soft);
+  font-weight: 700;
 }
 
 .lyric-sync-btn {
@@ -1503,15 +1514,17 @@ img {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
+  width: 100%;
 }
 
 .np-cover {
-  width: min(340px, 78vw);
+  width: min(320px, 76vw);
+  max-height: 38svh;
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-xl);
   overflow: hidden;
-  box-shadow: var(--shadow-artwork);
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.35);
   background: var(--surface-raised);
 }
 
@@ -1536,40 +1549,103 @@ img {
 }
 
 .np-track-title {
-  font-size: clamp(1.35rem, 1.1rem + 1vw, 1.8rem);
-  line-height: 1.15;
+  font-family: var(--font-display);
+  font-size: clamp(1.22rem, 1.05rem + 1vw, 1.65rem);
+  font-weight: 700;
+  line-height: 1.2;
   color: var(--ink);
+  letter-spacing: -0.02em;
 }
 
 .np-track-artist {
-  font-size: var(--text-body);
+  font-family: var(--font-body);
+  font-size: 0.94rem;
   color: var(--ink-secondary);
   margin-top: 4px;
 }
 
+/* === Primary 5-Button Transport Deck (Symmetrical, Spacious, Never Squeezed) === */
 .np-transport {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  max-width: 340px;
+  max-width: 350px;
+  margin: 0 auto;
+}
+
+.icon-btn-transport {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .np-play-hero {
   width: 68px;
   height: 68px;
-  border-radius: var(--radius-pill);
-  background: var(--control-primary-bg);
-  color: var(--control-primary-ink);
+  min-width: 68px;
+  min-height: 68px;
+  aspect-ratio: 1 / 1;
+  flex-shrink: 0;
+  border-radius: 50% !important;
+  background: var(--ink);
+  color: var(--bg);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-dock);
-  transition: transform var(--dur-fast) var(--ease-press), opacity var(--dur-fast);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.38);
+  transition: transform var(--dur-fast) var(--ease-press), box-shadow var(--dur-fast);
+}
+
+.np-play-hero:hover {
+  transform: scale(1.04);
 }
 
 .np-play-hero:active {
   transform: scale(0.94);
+}
+
+/* === Secondary Utility Action Pills (Anchors Bottom & Eliminates Dead Space) === */
+.np-secondary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.np-action-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background-color var(--dur-fast), color var(--dur-fast), transform var(--dur-fast);
+}
+
+.np-action-pill:hover {
+  background: var(--surface-active);
+  color: var(--ink);
+  border-color: var(--border-control);
+  transform: translateY(-1px);
+}
+
+.np-action-pill:active {
+  transform: scale(0.96);
 }
 
 .np-side-panel {
@@ -2631,17 +2707,31 @@ img {
     margin: 0 auto 16px;
   }
 
+  .now-playing-backdrop {
+    padding: 14px 20px 24px;
+    min-height: 100svh;
+  }
+
   .np-stage {
     display: flex;
     flex-direction: column;
     width: 100%;
     margin: 0 auto;
     gap: 0;
+    flex: 1;
   }
 
   .np-stage .np-deck {
     display: flex;
+    flex-direction: column;
+    justify-content: space-between;
     width: 100%;
+    max-width: 380px;
+    margin: 0 auto;
+    flex: 1;
+    min-height: calc(100svh - 130px);
+    gap: 14px;
+    padding-bottom: 8px;
   }
 
   .np-stage.show-lyrics .np-deck {

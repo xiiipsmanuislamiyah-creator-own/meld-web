@@ -274,34 +274,25 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
             isPlaying={isPlaying}
           />
 
+          {/* Main 5-Button Transport Deck: Perfectly Balanced, Symmetrical, Never Squeezed */}
           <div className="np-transport">
             <button
               type="button"
-              className={`icon-btn${shuffle ? " is-active" : ""}`}
+              className={`icon-btn icon-btn-transport${shuffle ? " is-active" : ""}`}
               onClick={toggleShuffle}
-              aria-label="Toggle shuffle"
+              aria-label="Acak lagu"
               aria-pressed={shuffle}
             >
-              <Shuffle size={21} weight={shuffle ? "bold" : "regular"} />
+              <Shuffle size={22} weight={shuffle ? "bold" : "regular"} />
             </button>
 
             <button
               type="button"
-              className="icon-btn"
-              onClick={() => seekTo(Math.max(0, currentTime - skipSec))}
-              aria-label={`Mundur ${skipSec} detik`}
-              title={`-${skipSec}s`}
-            >
-              <ArrowCounterClockwise size={20} />
-            </button>
-
-            <button
-              type="button"
-              className="icon-btn"
+              className="icon-btn icon-btn-transport"
               onClick={() => void prevTrack()}
               aria-label="Lagu sebelumnya"
             >
-              <SkipBack size={25} weight="fill" />
+              <SkipBack size={26} weight="fill" />
             </button>
 
             <button
@@ -311,54 +302,70 @@ export function NowPlayingOverlay({ onAddToPlaylist }: NowPlayingOverlayProps) {
               aria-label={isPlaying ? "Jeda pemutaran" : "Lanjutkan pemutaran"}
             >
               {isBuffering ? (
-                <CircleNotch size={28} weight="bold" style={{ animation: "spin 0.8s linear infinite" }} />
+                <CircleNotch size={32} weight="bold" style={{ animation: "spin 0.8s linear infinite" }} />
               ) : isPlaying ? (
-                <Pause size={28} weight="fill" />
+                <Pause size={30} weight="fill" />
               ) : (
-                <Play size={28} weight="fill" style={{ marginLeft: 3 }} />
+                <Play size={30} weight="fill" style={{ marginLeft: 3 }} />
               )}
             </button>
 
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn icon-btn-transport"
               onClick={() => void nextTrack()}
               aria-label="Lagu selanjutnya"
             >
-              <SkipForward size={25} weight="fill" />
+              <SkipForward size={26} weight="fill" />
             </button>
 
             <button
               type="button"
-              className="icon-btn"
-              onClick={() => seekTo(currentTime + skipSec)}
-              aria-label={`Maju ${skipSec} detik`}
-              title={`+${skipSec}s`}
-            >
-              <ArrowClockwise size={20} />
-            </button>
-
-            <button
-              type="button"
-              className={`icon-btn${repeat !== "off" ? " is-active" : ""}`}
+              className={`icon-btn icon-btn-transport${repeat !== "off" ? " is-active" : ""}`}
               onClick={cycleRepeat}
               aria-label={`Mode ulang: ${repeat}`}
             >
               {repeat === "one" ? (
-                <RepeatOnce size={21} weight="bold" />
+                <RepeatOnce size={22} weight="bold" />
               ) : (
-                <Repeat size={21} weight={repeat === "all" ? "bold" : "regular"} />
+                <Repeat size={22} weight={repeat === "all" ? "bold" : "regular"} />
               )}
+            </button>
+          </div>
+
+          {/* Secondary Utility Actions (Anchors Bottom of Deck & Eliminates Dead Space) */}
+          <div className="np-secondary-actions">
+            <button
+              type="button"
+              className="np-action-pill"
+              onClick={() => seekTo(Math.max(0, currentTime - skipSec))}
+              aria-label={`Mundur ${skipSec} detik`}
+              title={`-${skipSec}s`}
+            >
+              <ArrowCounterClockwise size={14} weight="bold" />
+              <span>-{skipSec}s</span>
             </button>
 
             <button
               type="button"
-              className="icon-btn"
+              className="np-action-pill"
               onClick={() => void startRadioFromTrack(currentTrack)}
               title="Mulai Radio Mix"
               aria-label="Mulai Radio Mix"
             >
-              <Radio size={20} />
+              <Radio size={14} weight="bold" />
+              <span>Radio Mix</span>
+            </button>
+
+            <button
+              type="button"
+              className="np-action-pill"
+              onClick={() => seekTo(currentTime + skipSec)}
+              aria-label={`Maju ${skipSec} detik`}
+              title={`+${skipSec}s`}
+            >
+              <ArrowClockwise size={14} weight="bold" />
+              <span>+{skipSec}s</span>
             </button>
           </div>
         </div>
