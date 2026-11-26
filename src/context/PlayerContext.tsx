@@ -280,6 +280,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       onProgress: (cur, dur) => {
         setCurrentTime(cur);
         if (dur > 0) setDuration(dur);
+        if (
+          "mediaSession" in navigator &&
+          "setPositionState" in navigator.mediaSession &&
+          dur > 0
+        ) {
+          try {
+            navigator.mediaSession.setPositionState({
+              duration: Math.max(dur, 0.1),
+              playbackRate: effectivePlaybackRateRef.current,
+              position: Math.min(Math.max(cur, 0), Math.max(dur, 0.1)),
+            });
+          } catch {}
+        }
         if (stateRef.current.playbackState === "playing" && stateRef.current.currentTrack) {
           statTickAccumulator.current += 0.35;
           if (statTickAccumulator.current >= 5) {
@@ -331,6 +344,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       ) / 100,
     ),
   );
+  const effectivePlaybackRateRef = useRef(1);
+  effectivePlaybackRateRef.current = effectivePlaybackRate;
 
   // Sync effective playbackRate to YouTube engine
   useEffect(() => {
@@ -346,12 +361,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let createdUrl: string | null = null;
     try {
-      // Build a genuine, valid 1.5s silent PCM WAV audio element so mobile Chrome & Safari
-      // treat the tab as an active foreground audio playback session and never pause on tab exit/lockscreen
+      // Build a genuine, valid 2.0s PCM WAV audio element with 28Hz sub-bass dither at -66dB.
+      // Chromium Power Saver & Android Audio Focus inspect PCM buffers: all-zero or <0.01 vol
+      // is flagged as InAudible and suspended. Active dither keeps the audio stream classified as Audible.
       const sampleRate = 8000;
       const numChannels = 1;
       const bitsPerSample = 16;
-      const durationSec = 1.5;
+      const durationSec = 2.0;
       const numSamples = Math.floor(sampleRate * durationSec);
       const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
       const blockAlign = numChannels * (bitsPerSample / 8);
@@ -377,11 +393,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       writeStr(36, "data");
       view.setUint32(40, dataSize, true);
 
+      // 28Hz imperceptible dither sine tone (amplitude ~12 out of 32767)
+      for (let i = 0; i < numSamples; i++) {
+        const sample = Math.round(12 * Math.sin((2 * Math.PI * 28 * i) / sampleRate));
+        view.setInt16(44 + i * 2, sample, true);
+      }
+
       const blob = new Blob([buffer], { type: "audio/wav" });
       createdUrl = URL.createObjectURL(blob);
       const audio = new Audio(createdUrl);
       audio.loop = true;
-      audio.volume = 0.0001;
+      audio.volume = 0.08;
       silentAudioRef.current = audio;
     } catch (_) {}
 
@@ -514,11 +536,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       navigator.mediaSession.playbackState =
         playbackState === "playing" ? "playing" : playbackState === "paused" ? "paused" : "none";
       navigator.mediaSession.setActionHandler("play", () => {
+        silentAudioRef.current?.play().catch(() => {});
         engineRef.current?.play();
         setPlaybackState("playing");
       });
       navigator.mediaSession.setActionHandler("pause", () => {
         engineRef.current?.pause();
+        silentAudioRef.current?.pause();
         setPlaybackState("paused");
       });
       navigator.mediaSession.setActionHandler("nexttrack", () => void nextTrack());

@@ -144,8 +144,27 @@ export class YouTubeAudioEngine {
               setTimeout(() => {
                 if (!this.userPaused && this.player) {
                   try {
+                    const st = this.player.getPlayerState();
+                    if (st === window.YT?.PlayerState.PLAYING) {
+                      this.callbacks.onStateChange("playing");
+                      return;
+                    }
                     this.player.playVideo();
                   } catch (_) {}
+                  // If background execution prevented automatic resume, sync paused state so
+                  // lockscreen & media notification offer the "Play" button accurately
+                  setTimeout(() => {
+                    if (!this.userPaused && this.player) {
+                      try {
+                        const st2 = this.player.getPlayerState();
+                        if (st2 !== window.YT?.PlayerState.PLAYING) {
+                          this.callbacks.onStateChange("paused");
+                        }
+                      } catch (_) {
+                        this.callbacks.onStateChange("paused");
+                      }
+                    }
+                  }, 180);
                 }
               }, 120);
               return;
