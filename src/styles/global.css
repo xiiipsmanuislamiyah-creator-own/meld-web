@@ -2102,13 +2102,13 @@ img {
 /* === Non-Occluded In-Viewport YouTube IFrame Host + Video Stage === */
 .yt-audio-host {
   position: fixed;
-  width: 4px;
-  height: 4px;
-  right: 2px;
-  bottom: 2px;
-  opacity: 0.04;
+  width: 240px;
+  height: 135px;
+  right: 6px;
+  bottom: 6px;
+  opacity: 0.05;
   pointer-events: none;
-  z-index: 0;
+  z-index: -1;
   overflow: hidden;
   transform: translateZ(0);
   will-change: transform;

@@ -104,6 +104,7 @@ export class YouTubeAudioEngine {
         autoplay: 1,
         controls: 0,
         disablekb: 1,
+        enablejsapi: 1,
         fs: 0,
         iv_load_policy: 3,
         modestbranding: 1,
@@ -132,42 +133,27 @@ export class YouTubeAudioEngine {
             this.player?.setPlaybackRate?.(this.pendingRate);
             this.callbacks.onStateChange("playing");
           } else if (ev.data === PS.PAUSED) {
-            // Check if pause occurred while tab is hidden (browser tab switch, minimize, or screen lock)
-            const isTabHidden =
-              typeof document !== "undefined" &&
-              (document.hidden || document.visibilityState === "hidden");
-            if (!this.userPaused && isTabHidden) {
-              // Automatically re-assert playback so music does not stop when exiting web
+            // Check if pause occurred without user intent (e.g. mobile tab switched, minimized, or screen locked)
+            if (!this.userPaused) {
+              // Immediately command YouTube player to keep playing in background
               try {
                 this.player?.playVideo();
               } catch (_) {}
               setTimeout(() => {
                 if (!this.userPaused && this.player) {
                   try {
-                    const st = this.player.getPlayerState();
-                    if (st === window.YT?.PlayerState.PLAYING) {
-                      this.callbacks.onStateChange("playing");
-                      return;
-                    }
                     this.player.playVideo();
                   } catch (_) {}
-                  // If background execution prevented automatic resume, sync paused state so
-                  // lockscreen & media notification offer the "Play" button accurately
-                  setTimeout(() => {
-                    if (!this.userPaused && this.player) {
-                      try {
-                        const st2 = this.player.getPlayerState();
-                        if (st2 !== window.YT?.PlayerState.PLAYING) {
-                          this.callbacks.onStateChange("paused");
-                        }
-                      } catch (_) {
-                        this.callbacks.onStateChange("paused");
-                      }
-                    }
-                  }, 180);
                 }
-              }, 120);
-              return;
+              }, 80);
+              setTimeout(() => {
+                if (!this.userPaused && this.player) {
+                  try {
+                    this.player.playVideo();
+                  } catch (_) {}
+                }
+              }, 240);
+              return; // DO NOT emit 'paused' callback so app & mediaSession stay active in playing state!
             }
             this.callbacks.onStateChange("paused");
           } else if (ev.data === PS.BUFFERING) {
@@ -191,10 +177,19 @@ export class YouTubeAudioEngine {
         const cur = this.player.getCurrentTime() || 0;
         const dur = this.player.getDuration() || 0;
         this.callbacks.onProgress(cur, dur);
+
+        // Auto-recover if paused in background without user consent
+        if (!this.userPaused) {
+          const st = this.player.getPlayerState();
+          const PS = window.YT?.PlayerState;
+          if (PS && (st === PS.PAUSED || st === PS.UNSTARTED)) {
+            this.player.playVideo();
+          }
+        }
       } catch {
         // ignore transient iframe errors
       }
-    }, 350);
+    }, 400);
   }
 
   load(videoId: string, autoplay = true): void {
@@ -213,7 +208,16 @@ export class YouTubeAudioEngine {
   play(): void {
     this.userPaused = false;
     if (this.ready && this.player) {
-      this.player.playVideo();
+      try {
+        this.player.playVideo();
+      } catch (_) {}
+      setTimeout(() => {
+        if (!this.userPaused && this.player) {
+          try {
+            this.player.playVideo();
+          } catch (_) {}
+        }
+      }, 80);
     }
   }
 
@@ -262,8 +266,14 @@ export class YouTubeAudioEngine {
       this.callbacks.onProgress(cur, dur);
       const st = this.player.getPlayerState();
       const PS = window.YT?.PlayerState;
-      if (PS && st === PS.PLAYING) this.callbacks.onStateChange("playing");
-      else if (PS && st === PS.PAUSED) this.callbacks.onStateChange("paused");
+      if (PS && st === PS.PLAYING) {
+        this.callbacks.onStateChange("playing");
+      } else if (!this.userPaused) {
+        this.play();
+        this.callbacks.onStateChange("playing");
+      } else if (PS && st === PS.PAUSED) {
+        this.callbacks.onStateChange("paused");
+      }
     } catch {
       // ignore
     }
