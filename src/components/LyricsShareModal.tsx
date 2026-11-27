@@ -24,11 +24,18 @@ type CardAspect = "1:1" | "4:5" | "9:16";
 type CardStyleTheme = "obsidian" | "chroma" | "paper";
 type ParticleStyle = "snow" | "embers" | "rain" | "off";
 
+export interface SyncedLyricLine {
+  time: number;
+  text: string;
+}
+
 interface LyricsShareModalProps {
   open: boolean;
   onClose: () => void;
   track: Track;
   lines: string[];
+  syncedLines?: SyncedLyricLine[];
+  currentTime?: number;
   initialIndex?: number;
 }
 
@@ -104,6 +111,8 @@ export function LyricsShareModal({
   onClose,
   track,
   lines,
+  syncedLines,
+  currentTime = 0,
   initialIndex = 0,
 }: LyricsShareModalProps) {
   const [mode, setMode] = useState<StudioMode>("video");
@@ -115,8 +124,8 @@ export function LyricsShareModal({
   const [spinDisc, setSpinDisc] = useState(true);
   const [showVisualizer, setShowVisualizer] = useState(true);
   const [particlesMode, setParticlesMode] = useState<ParticleStyle>("snow");
-  const [bassShake, setBassShake] = useState(true);
-  const [durationSec, setDurationSec] = useState<10 | 15 | 30>(15);
+  const [grooveDJ, setGrooveDJ] = useState(true);
+  const [durationSec, setDurationSec] = useState<number>(15);
 
   // Recording / Export state
   const [recording, setRecording] = useState(false);
@@ -129,6 +138,7 @@ export function LyricsShareModal({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordStopTimerRef = useRef<number | null>(null);
   const recordIntervalRef = useRef<number | null>(null);
+  const recordStartTimestampRef = useRef<number>(0);
 
   const { palette } = useTheme();
   const { notify } = useToast();
@@ -175,7 +185,7 @@ export function LyricsShareModal({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, recording]);
+  }, [open, recording, onClose]);
 
   const stopRecording = useCallback(() => {
     if (recordStopTimerRef.current !== null) {
@@ -218,8 +228,6 @@ export function LyricsShareModal({
         ink: "#16171B",
         muted: "#5A5C66",
         accent: palette.accentLight,
-        pillBg: palette.accentLight,
-        pillInk: "#FCFBF8",
       };
     }
     if (cardTheme === "chroma") {
@@ -230,8 +238,6 @@ export function LyricsShareModal({
         ink: "#F7F5F0",
         muted: "#C4C7D0",
         accent: palette.accentDark,
-        pillBg: palette.accentDark,
-        pillInk: "#111318",
       };
     }
     return {
@@ -241,30 +247,27 @@ export function LyricsShareModal({
       ink: "#F6F4EF",
       muted: "#A6AAB7",
       accent: palette.accentDark,
-      pillBg: palette.accentDark,
-      pillInk: "#111318",
     };
   }, [cardTheme, palette]);
 
-  // Core Canvas Frame Renderer (shared by Live Preview & MediaRecorder Video Export)
+  // Core Canvas Frame Renderer (Musical Beat Sync, Genuine Song Timestamps, Zero Slop)
   const renderVideoFrame = useCallback(
     (
       ctx: CanvasRenderingContext2D,
       w: number,
       h: number,
-      timeSec: number,
+      elapsedSec: number,
       totalSec: number,
     ) => {
-      // Simulated acoustic beat envelope (~116 BPM)
-      const bpmFreq = 116 / 60;
-      const beatCycle = (timeSec * bpmFreq) % 1;
-      const kick = Math.pow(Math.max(0, 1 - beatCycle * 3.4), 2.4);
-      const subWave = 0.5 + 0.5 * Math.sin(timeSec * 3.1);
+      // 1. Smooth Musical DJ Beat Pulse (~124 BPM) without erratic screen jitter
+      const bpm = 124;
+      const beatCycle = (elapsedSec * (bpm / 60)) % 1;
+      const kick = Math.pow(Math.max(0, 1 - beatCycle * 2.8), 2.2);
+      const subWave = 0.5 + 0.5 * Math.sin(elapsedSec * 2.5);
       const energy = 0.25 + kick * 0.75;
 
-      const shakeX = bassShake ? (Math.sin(timeSec * 52) * kick * 4.5) : 0;
-      const shakeY = bassShake ? (Math.cos(timeSec * 44) * kick * 4.5) : 0;
-      const pulseScale = bassShake ? 1 + kick * 0.018 : 1;
+      // Tactile scale bump on the beat downbeat (clean musical punch, no screen displacement)
+      const pulseScale = grooveDJ ? (1 + kick * 0.022) : 1;
 
       ctx.save();
       ctx.fillStyle = themeColors.bg;
@@ -280,7 +283,7 @@ export function LyricsShareModal({
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, w, h);
 
-      // Subtle blurred cover backdrop on dark/chroma modes
+      // Blurred cover backdrop on dark/chroma modes
       const img = artworkImgRef.current;
       if (img && cardTheme !== "paper") {
         ctx.save();
@@ -291,7 +294,6 @@ export function LyricsShareModal({
         ctx.drawImage(img, (w - bw) / 2, (h - bh) / 2, bw, bh);
         ctx.restore();
 
-        // Legibility scrim
         const scrim = ctx.createLinearGradient(0, 0, 0, h);
         scrim.addColorStop(0, `${themeColors.bg}B5`);
         scrim.addColorStop(0.5, `${themeColors.bg}8C`);
@@ -300,8 +302,8 @@ export function LyricsShareModal({
         ctx.fillRect(0, 0, w, h);
       }
 
-      // Apply subtle bass shake transform to main stage
-      ctx.translate(cx + shakeX, cy + shakeY);
+      // Apply tactile musical pulse transform to stage
+      ctx.translate(cx, cy);
       ctx.scale(pulseScale, pulseScale);
       ctx.translate(-cx, -cy);
 
@@ -322,19 +324,22 @@ export function LyricsShareModal({
       const safeArtist = track.artist.length > 34 ? `${track.artist.slice(0, 33)}…` : track.artist;
       ctx.fillText(safeArtist, cx, topY + w * 0.098);
 
-      // Spinning Vinyl / CD Disc + Radial Audio Visualizer
+      // 2. Spinning Vinyl / CD Disc
       const discRadius = aspect === "9:16" ? w * 0.255 : w * 0.21;
 
+      // Radial Audio Visualizer Bars
       if (showVisualizer) {
-        const barCount = 56;
+        const barCount = 52;
         ctx.save();
         ctx.translate(cx, cy);
         for (let i = 0; i < barCount; i++) {
-          const angle = (i / barCount) * Math.PI * 2 + timeSec * 0.22;
+          const angle = (i / barCount) * Math.PI * 2 + elapsedSec * 0.22;
+          const isBassBar = i % 4 === 0;
           const wave =
-            Math.abs(Math.sin(i * 0.45 + timeSec * 4.4)) * 0.55 +
-            Math.abs(Math.cos(i * 0.22 - timeSec * 2.8)) * 0.45;
-          const barLen = 10 + wave * energy * (w * 0.092);
+            Math.abs(Math.sin(i * 0.45 + elapsedSec * 3.8)) * 0.55 +
+            Math.abs(Math.cos(i * 0.22 - elapsedSec * 2.2)) * 0.45;
+          const amp = isBassBar ? (wave * 0.4 + kick * 0.6) : wave;
+          const barLen = 10 + amp * energy * (w * 0.092);
           const innerR = discRadius + 14;
           const x1 = Math.cos(angle) * innerR;
           const y1 = Math.sin(angle) * innerR;
@@ -342,7 +347,7 @@ export function LyricsShareModal({
           const y2 = Math.sin(angle) * (innerR + barLen);
 
           ctx.strokeStyle = themeColors.accent;
-          ctx.globalAlpha = 0.45 + wave * 0.52;
+          ctx.globalAlpha = 0.42 + amp * 0.54;
           ctx.lineWidth = Math.max(3, w * 0.0068);
           ctx.lineCap = "round";
           ctx.beginPath();
@@ -353,11 +358,11 @@ export function LyricsShareModal({
         ctx.restore();
       }
 
-      // Disc Outer Shadow & Vinyl Grooves
+      // Disc Outer Shadow & Smooth Vinyl Inertia
       ctx.save();
       ctx.translate(cx, cy);
       if (spinDisc) {
-        ctx.rotate(timeSec * 0.85);
+        ctx.rotate(elapsedSec * 0.82);
       }
 
       // Outer vinyl rim
@@ -382,7 +387,7 @@ export function LyricsShareModal({
       }
       ctx.restore();
 
-      // Subtle vinyl grooves + glossy light reflection
+      // Vinyl grooves
       for (let g = 0.52; g <= 0.92; g += 0.14) {
         ctx.beginPath();
         ctx.arc(0, 0, discRadius * g, 0, Math.PI * 2);
@@ -417,7 +422,7 @@ export function LyricsShareModal({
 
       ctx.restore();
 
-      // Bottom Spectrum Waveform Bars (Balances Mid-to-Lower Vertical Space)
+      // 3. Bottom Spectrum Waveform Bars
       if (showVisualizer) {
         const waveBars = 36;
         const waveW = w * 0.72;
@@ -427,13 +432,13 @@ export function LyricsShareModal({
         for (let i = 0; i < waveBars; i++) {
           const norm = i / waveBars;
           const envelope = Math.sin(norm * Math.PI);
-          const amp =
-            (0.22 + 0.78 * Math.abs(Math.sin(i * 0.62 + timeSec * 5.2))) *
-            envelope *
-            (0.45 + energy * 0.55);
-          const barH = Math.max(6, amp * (w * 0.075));
+          const isLow = i < 10;
+          const dynamicAmp = isLow
+            ? (0.35 + kick * 0.65) * envelope
+            : (0.25 + 0.75 * Math.abs(Math.sin(i * 0.58 + elapsedSec * 4.2))) * envelope;
+          const barH = Math.max(6, dynamicAmp * (w * 0.085));
           ctx.fillStyle = themeColors.accent;
-          ctx.globalAlpha = 0.35 + amp * 0.6;
+          ctx.globalAlpha = 0.35 + dynamicAmp * 0.6;
           ctx.beginPath();
           ctx.roundRect(startX + i * step, baseY - barH / 2, step * 0.58, barH, 4);
           ctx.fill();
@@ -441,24 +446,68 @@ export function LyricsShareModal({
         ctx.globalAlpha = 1;
       }
 
-      // Dynamic Karaoke Lyrics at Lower Area (Word-by-Word Capsule Highlight, No Static Dark Box!)
-      const lineCount = selectedLines.length;
-      const segDur = totalSec / Math.max(1, lineCount);
-      const activeLineIdx = Math.min(lineCount - 1, Math.floor((timeSec % totalSec) / segDur));
-      const lineFrac = ((timeSec % totalSec) % segDur) / segDur;
-      const activeText = selectedLines[activeLineIdx] || track.title;
-      const nextText = selectedLines[(activeLineIdx + 1) % lineCount];
+      // 4. Genuine Song Lyric Synchronization & Word Progression
+      let activeText = selectedLines[0] || track.title;
+      let nextText = selectedLines[1] || "";
+      let lineProgress = 0;
+
+      if (syncedLines && syncedLines.length > 0) {
+        // Find anchor timestamp from selected lines
+        const firstSelectedIdx = selectedIndices[0] ?? initialIndex ?? 0;
+        const anchorLine = syncedLines[firstSelectedIdx] || syncedLines[0];
+        const baseSongTime = anchorLine ? anchorLine.time : currentTime;
+        const currentSongTime = baseSongTime + (elapsedSec % totalSec);
+
+        // Find active synced line corresponding to the current virtual song time
+        let activeSyncedIdx = 0;
+        for (let i = 0; i < syncedLines.length; i++) {
+          const cur = syncedLines[i];
+          const nxt = syncedLines[i + 1];
+          if (currentSongTime >= cur.time && (!nxt || currentSongTime < nxt.time)) {
+            activeSyncedIdx = i;
+            break;
+          }
+        }
+
+        const curLine = syncedLines[activeSyncedIdx];
+        const nxtLine = syncedLines[activeSyncedIdx + 1];
+        activeText = curLine?.text || selectedLines[0] || track.title;
+        nextText = nxtLine?.text || "";
+
+        const lStart = curLine?.time ?? 0;
+        const lEnd = nxtLine?.time ?? (lStart + Math.max(2.8, activeText.length * 0.14));
+        const lDur = Math.max(0.6, lEnd - lStart);
+        lineProgress = Math.max(0, Math.min(1, (currentSongTime - lStart) / lDur));
+      } else {
+        // Plain text fallback: smooth pacing across selected lines
+        const totalLines = selectedLines.length;
+        const segDur = totalSec / Math.max(1, totalLines);
+        const lIdx = Math.min(totalLines - 1, Math.floor((elapsedSec % totalSec) / segDur));
+        lineProgress = ((elapsedSec % totalSec) % segDur) / segDur;
+        activeText = selectedLines[lIdx] || track.title;
+        nextText = selectedLines[lIdx + 1] || "";
+      }
 
       const fontSize = Math.round(w * (aspect === "9:16" ? 0.044 : 0.04));
       ctx.font = `700 ${fontSize}px "Bricolage Grotesque", sans-serif`;
       const wrapped = wrapCanvasText(ctx, activeText, w * 0.82);
 
-      // Compute active word index for karaoke highlight capsule
+      // Active word calculation by character length weighting
       const allWords = activeText.split(/\s+/).filter(Boolean);
-      const activeWordGlobalIdx = Math.min(
-        allWords.length - 1,
-        Math.floor(lineFrac * allWords.length),
-      );
+      const weights = allWords.map((w) => Math.max(2, w.length));
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      let accum = 0;
+      let activeWordGlobalIdx = 0;
+      for (let w = 0; w < allWords.length; w++) {
+        const startF = accum / totalWeight;
+        accum += weights[w];
+        const endF = accum / totalWeight;
+        if (lineProgress >= startF && lineProgress <= endF) {
+          activeWordGlobalIdx = w;
+          break;
+        }
+        if (lineProgress > endF) activeWordGlobalIdx = w;
+      }
 
       const lyricBaseY = aspect === "9:16" ? h * 0.785 : h * 0.79;
       const lineH = fontSize * 1.48;
@@ -480,31 +529,26 @@ export function LyricsShareModal({
           const ww = wordWidths[wIdx];
 
           if (isActiveWord) {
-            // Dynamic glowing capsule behind active word only
-            ctx.fillStyle = themeColors.pillBg;
+            // High-contrast accent color with clean underline (no clumsy box cutting words)
+            ctx.fillStyle = themeColors.accent;
+            ctx.fillText(word, cursorX, y);
+            // Sleek subtle underline bar for active word
+            ctx.fillStyle = `${themeColors.accent}C0`;
             ctx.beginPath();
-            ctx.roundRect(
-              cursorX - 11,
-              y - fontSize * 0.86,
-              ww + 22,
-              fontSize * 1.18,
-              12,
-            );
+            ctx.roundRect(cursorX, y + 6, ww, 3, 1.5);
             ctx.fill();
-            ctx.fillStyle = themeColors.pillInk;
           } else {
             ctx.fillStyle = isPastWord ? themeColors.ink : themeColors.muted;
+            ctx.fillText(word, cursorX, y);
           }
 
-          ctx.textAlign = "left";
-          ctx.fillText(word, cursorX, y);
           cursorX += ww + spaceW;
           wordCursor += 1;
         });
       });
 
-      // Subtle preview of upcoming lyric line
-      if (lineCount > 1 && nextText && activeLineIdx < lineCount - 1) {
+      // Preview of upcoming lyric line
+      if (nextText) {
         ctx.textAlign = "center";
         ctx.font = `500 ${Math.round(w * 0.028)}px "Plus Jakarta Sans", sans-serif`;
         ctx.fillStyle = themeColors.muted;
@@ -523,7 +567,7 @@ export function LyricsShareModal({
       ctx.roundRect(progX, progY, progW, 5, 3);
       ctx.fill();
 
-      const progressFrac = Math.min(1, (timeSec % totalSec) / totalSec);
+      const progressFrac = Math.min(1, Math.max(0, (elapsedSec % totalSec) / totalSec));
       ctx.fillStyle = themeColors.accent;
       ctx.beginPath();
       ctx.roundRect(progX, progY, Math.max(8, progW * progressFrac), 5, 3);
@@ -536,7 +580,7 @@ export function LyricsShareModal({
 
       ctx.restore();
 
-      // Atmospheric Particle Layer (Snow / Embers / Rain)
+      // 5. Atmospheric Particles
       if (particlesMode !== "off") {
         if (particlesRef.current.length === 0) {
           particlesRef.current = createParticles(46, w, h);
@@ -544,7 +588,7 @@ export function LyricsShareModal({
         ctx.save();
         for (const p of particlesRef.current) {
           if (particlesMode === "snow") {
-            p.x += p.vx + Math.sin(timeSec * 1.4 + p.phase) * 0.55;
+            p.x += p.vx + Math.sin(elapsedSec * 1.4 + p.phase) * 0.55;
             p.y += p.vy * 0.9;
             if (p.y > h + 8) {
               p.y = -8;
@@ -559,7 +603,7 @@ export function LyricsShareModal({
             ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
             ctx.fill();
           } else if (particlesMode === "embers") {
-            p.x += Math.sin(timeSec * 2 + p.phase) * 0.85;
+            p.x += Math.sin(elapsedSec * 2 + p.phase) * 0.85;
             p.y -= p.vy * 0.85;
             if (p.y < -8) {
               p.y = h + 8;
@@ -591,12 +635,16 @@ export function LyricsShareModal({
     },
     [
       aspect,
-      bassShake,
       cardTheme,
+      currentTime,
+      grooveDJ,
+      initialIndex,
       particlesMode,
+      selectedIndices,
       selectedLines,
       showVisualizer,
       spinDisc,
+      syncedLines,
       themeColors,
       track.artist,
       track.title,
@@ -804,13 +852,15 @@ export function LyricsShareModal({
       setRecordElapsed(0);
 
       const startedAt = Date.now();
+      recordStartTimestampRef.current = startedAt;
       const totalMs = durationSec * 1000;
 
       recordIntervalRef.current = window.setInterval(() => {
         const elapsedMs = Date.now() - startedAt;
-        setRecordElapsed(Math.min(durationSec, Math.floor(elapsedMs / 1000)));
+        const elapsedS = elapsedMs / 1000;
+        setRecordElapsed(Math.min(durationSec, Math.floor(elapsedS)));
         setRecordProgress(Math.min(100, (elapsedMs / totalMs) * 100));
-      }, 150);
+      }, 120);
 
       recordStopTimerRef.current = window.setTimeout(() => {
         if (recordIntervalRef.current !== null) {
@@ -1008,7 +1058,7 @@ export function LyricsShareModal({
             </div>
           </div>
 
-          {/* Video-Only FX Controls */}
+          {/* Video-Only FX & Duration Controls */}
           {mode === "video" && (
             <div className="video-fx-bar">
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -1033,51 +1083,74 @@ export function LyricsShareModal({
                 <button
                   type="button"
                   disabled={recording}
-                  className={`chip${bassShake ? " is-active" : ""}`}
-                  onClick={() => setBassShake((v) => !v)}
+                  className={`chip${grooveDJ ? " is-active" : ""}`}
+                  onClick={() => setGrooveDJ((v) => !v)}
                 >
                   <Sparkle size={14} weight="bold" />
-                  <span>Getar Bass</span>
+                  <span>Groove DJ</span>
                 </button>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: "0.75rem", color: "var(--ink-muted)", fontWeight: 600 }}>Partikel:</span>
-                  {(
-                    [
-                      { id: "snow", label: "Salju", icon: <Snowflake size={13} /> },
-                      { id: "embers", label: "Cahaya", icon: <Sparkle size={13} /> },
-                      { id: "rain", label: "Hujan", icon: <CloudRain size={13} /> },
-                      { id: "off", label: "Mati", icon: null },
-                    ] as const
-                  ).map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      disabled={recording}
-                      className={`chip${particlesMode === p.id ? " is-active" : ""}`}
-                      onClick={() => setParticlesMode(p.id)}
-                    >
-                      {p.icon}
-                      <span>{p.label}</span>
-                    </button>
-                  ))}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--ink-muted)", fontWeight: 600 }}>Partikel:</span>
+                {(
+                  [
+                    { id: "snow", label: "Salju", icon: <Snowflake size={13} /> },
+                    { id: "embers", label: "Cahaya", icon: <Sparkle size={13} /> },
+                    { id: "rain", label: "Hujan", icon: <CloudRain size={13} /> },
+                    { id: "off", label: "Mati", icon: null },
+                  ] as const
+                ).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={recording}
+                    className={`chip${particlesMode === p.id ? " is-active" : ""}`}
+                    onClick={() => setParticlesMode(p.id)}
+                  >
+                    {p.icon}
+                    <span>{p.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Duration: Preset Chips + Fine Range Slider (5s - 60s) */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", marginTop: 4, padding: "8px 10px", background: "var(--bg)", borderRadius: "var(--radius-sm)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ fontSize: "0.76rem", color: "var(--ink-muted)", fontWeight: 600 }}>Durasi Video:</span>
+                    {[5, 10, 15, 20, 30, 60].map((sec) => (
+                      <button
+                        key={sec}
+                        type="button"
+                        disabled={recording}
+                        className={`chip${durationSec === sec ? " is-active" : ""}`}
+                        style={{ minHeight: 26, padding: "0 8px", fontSize: "0.72rem" }}
+                        onClick={() => setDurationSec(sec)}
+                      >
+                        {sec}d
+                      </button>
+                    ))}
+                  </div>
+
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.78rem", fontWeight: 700, color: "var(--accent)" }}>
+                    {durationSec} detik
+                  </span>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: "0.75rem", color: "var(--ink-muted)", fontWeight: 600 }}>Durasi:</span>
-                  {([10, 15, 30] as const).map((sec) => (
-                    <button
-                      key={sec}
-                      type="button"
-                      disabled={recording}
-                      className={`chip${durationSec === sec ? " is-active" : ""}`}
-                      onClick={() => setDurationSec(sec)}
-                    >
-                      {sec}d
-                    </button>
-                  ))}
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <input
+                    type="range"
+                    min={5}
+                    max={60}
+                    step={1}
+                    value={durationSec}
+                    disabled={recording}
+                    onChange={(e) => setDurationSec(Number(e.target.value))}
+                    aria-label="Atur durasi video kustom"
+                    style={{ flex: 1, accentColor: "var(--accent)", cursor: "pointer", height: 5 }}
+                  />
+                  <span style={{ fontSize: "0.72rem", color: "var(--ink-muted)" }}>5s - 60s</span>
                 </div>
               </div>
             </div>

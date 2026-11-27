@@ -763,6 +763,8 @@ export function StudioDrawer({
           onClose={() => setShareOpen(false)}
           track={currentTrack}
           lines={lyricLinesForShare}
+          syncedLines={lyrics?.synced && lyrics.lines ? lyrics.lines : undefined}
+          currentTime={currentTime}
           initialIndex={Math.max(0, currentLyricIndex)}
         />
       )}

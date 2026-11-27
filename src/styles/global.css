@@ -1325,19 +1325,19 @@ img {
 .lyric-line {
   width: 100%;
   text-align: left;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
   font-family: var(--font-display);
   font-size: 1.08rem;
   font-weight: 600;
-  line-height: 1.42;
+  line-height: 1.45;
   color: var(--ink-muted);
-  border-left: 3px solid transparent;
+  border: none;
+  background: transparent;
   transition:
     color var(--dur-fast) var(--ease-out-snappy),
     background-color var(--dur-fast) var(--ease-out-snappy),
     transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.2s ease,
     box-shadow 0.2s ease;
 }
 
@@ -1351,9 +1351,9 @@ img {
   font-size: 1.24rem;
   font-weight: 700;
   background: var(--surface-active);
-  border-left-color: var(--accent);
+  border: none;
   box-shadow: 0 4px 18px -4px var(--accent-soft);
-  transform: scale(1.02);
+  transform: scale(1.015);
   transform-origin: left center;
 }
 
@@ -1370,19 +1370,8 @@ img {
 .lyric-line-content {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0;
   width: 100%;
-}
-
-.lyric-rhythm-badge {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: var(--accent-soft);
-  border-radius: var(--radius-sm);
 }
 
 .lyric-text-wrapper {
@@ -1392,7 +1381,7 @@ img {
   line-height: 1.48;
 }
 
-/* === Word-by-Word Rhythm Karaoke System (Multi-line Safe) === */
+/* === Word-by-Word Rhythm Karaoke System (Multi-line Safe, Anti-Slop) === */
 .karaoke-line-words {
   display: inline;
   line-height: 1.5;
@@ -1406,18 +1395,18 @@ img {
 
 .karaoke-word {
   display: inline;
-  transition: color 0.12s ease, text-shadow 0.12s ease, opacity 0.12s ease;
+  transition: color 0.14s ease, opacity 0.14s ease;
 }
 
 .karaoke-word.is-sung {
   color: var(--accent);
-  text-shadow: 0 0 12px var(--accent-soft);
   font-weight: 700;
 }
 
 .karaoke-word.is-singing {
+  color: var(--accent);
   font-weight: 700;
-  will-change: background-position;
+  opacity: 1;
 }
 
 .karaoke-word.is-upcoming {
@@ -1426,14 +1415,20 @@ img {
 }
 
 .lyric-line.is-current .karaoke-word.is-upcoming {
-  color: color-mix(in srgb, var(--ink) 48%, transparent);
+  color: var(--ink);
+  opacity: 0.62;
+}
+
+.lyric-line.is-current .karaoke-word.is-singing {
+  color: var(--accent);
+  font-weight: 700;
   opacity: 1;
 }
 
 .lyric-line.is-current .karaoke-word.is-sung {
   color: var(--accent);
-  text-shadow: 0 0 12px var(--accent-soft);
   font-weight: 700;
+  opacity: 0.95;
 }
 
 .lyric-sync-btn {

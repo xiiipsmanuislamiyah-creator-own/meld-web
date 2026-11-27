@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleNotch,
   Copy,
@@ -13,7 +13,6 @@ import type { LyricsPayload, Track } from "../types/music";
 import { translateLyricsLines } from "../lib/api";
 import { useSettings } from "../context/SettingsContext";
 import { useToast } from "../context/ToastContext";
-import { EqualizerBars } from "./EqualizerBars";
 
 interface TimedWord {
   text: string;
@@ -407,16 +406,10 @@ export function NowPlayingLyrics({
                 onClick={() => onSeek(Math.max(0, line.time - offsetSeconds))}
               >
                 <div className="lyric-line-content">
-                  {isCurrent && (
-                    <div className="lyric-rhythm-badge" title="Irama Vokal Aktif">
-                      <EqualizerBars paused={playbackState !== "playing"} />
-                    </div>
-                  )}
                   <div className="lyric-text-wrapper" style={{ flex: 1, textAlign: lyricsAlign }}>
                     <div className="karaoke-line-words" style={{ textAlign: lyricsAlign }}>
                       {words.map((w, wIdx) => {
                         let wordStatus: "sung" | "singing" | "upcoming" = "upcoming";
-                        let wordSweepPct = 0;
 
                         if (!isCurrent) {
                           wordStatus = isPast ? "sung" : "upcoming";
@@ -427,30 +420,12 @@ export function NowPlayingLyrics({
                             wordStatus = "upcoming";
                           } else {
                             wordStatus = "singing";
-                            const span = Math.max(0.001, w.endFrac - w.startFrac);
-                            wordSweepPct = Math.max(
-                              0,
-                              Math.min(100, ((lineProgress - w.startFrac) / span) * 100),
-                            );
                           }
                         }
 
-                        const singingStyle: React.CSSProperties =
-                          wordStatus === "singing"
-                            ? {
-                                background: `linear-gradient(90deg, var(--accent) 0%, var(--accent) ${wordSweepPct.toFixed(1)}%, color-mix(in srgb, var(--ink) 45%, transparent) ${wordSweepPct.toFixed(1)}%, color-mix(in srgb, var(--ink) 45%, transparent) 100%)`,
-                                WebkitBackgroundClip: "text",
-                                WebkitTextFillColor: "transparent",
-                                textShadow: "0 0 10px var(--accent-soft)",
-                              }
-                            : {};
-
                         return (
                           <span key={wIdx} className="karaoke-word-container">
-                            <span
-                              className={`karaoke-word is-${wordStatus}`}
-                              style={singingStyle}
-                            >
+                            <span className={`karaoke-word is-${wordStatus}`}>
                               {w.text}
                             </span>
                             {wIdx < words.length - 1 ? " " : ""}
