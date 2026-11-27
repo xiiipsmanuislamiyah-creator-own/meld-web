@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.7",
+    "@svgdotjs/svg.js": "^3.2.8",
+    "@theatre/core": "^0.7.2",
+    "@theatre/studio": "^0.7.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

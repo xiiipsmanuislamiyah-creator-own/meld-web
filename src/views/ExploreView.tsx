@@ -21,6 +21,7 @@ import { Artwork } from "../components/Artwork";
 import { TrackRow } from "../components/TrackRow";
 import { CollectionCard } from "../components/CollectionCard";
 import { HorizontalRail } from "../components/HorizontalRail";
+import { SvgIconMotion } from "../components/SvgMotion";
 
 interface ExploreViewProps {
   onOpenCollection: (id: string) => void;
@@ -55,12 +56,12 @@ const MOOD_TILES: MoodTile[] = [
 
 function TileIcon({ kind, color }: { kind: MoodTile["icon"]; color: string }) {
   const props = { size: 19, weight: "duotone" as const, style: { color } };
-  if (kind === "headphones") return <Headphones {...props} />;
-  if (kind === "flame") return <Flame {...props} />;
-  if (kind === "lightning") return <Lightning {...props} />;
-  if (kind === "waveform") return <Waveform {...props} />;
-  if (kind === "sparkles") return <Sparkle {...props} />;
-  return <MusicNotes {...props} />;
+  if (kind === "headphones") return <SvgIconMotion preset="float"><Headphones {...props} /></SvgIconMotion>;
+  if (kind === "flame") return <SvgIconMotion preset="pulse"><Flame {...props} /></SvgIconMotion>;
+  if (kind === "lightning") return <SvgIconMotion preset="spark"><Lightning {...props} /></SvgIconMotion>;
+  if (kind === "waveform") return <SvgIconMotion preset="wave"><Waveform {...props} /></SvgIconMotion>;
+  if (kind === "sparkles") return <SvgIconMotion preset="spark"><Sparkle {...props} /></SvgIconMotion>;
+  return <SvgIconMotion preset="float"><MusicNotes {...props} /></SvgIconMotion>;
 }
 
 export function ExploreView({ onOpenCollection, onAddToPlaylist }: ExploreViewProps) {
@@ -125,7 +126,9 @@ export function ExploreView({ onOpenCollection, onAddToPlaylist }: ExploreViewPr
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 14 }}>
         <div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--text-caption)", fontWeight: 700, color: "var(--accent)", marginBottom: 4 }}>
-            <Compass size={16} weight="fill" />
+            <SvgIconMotion preset="spin" duration={4000}>
+              <Compass size={16} weight="fill" />
+            </SvgIconMotion>
             <span>EXPLORE & CHARTS · {settings.region}</span>
           </div>
           <h1 style={{ fontSize: "var(--text-h1)" }}>

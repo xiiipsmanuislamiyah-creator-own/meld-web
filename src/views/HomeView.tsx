@@ -23,6 +23,7 @@ import { TrackRow } from "../components/TrackRow";
 import { TrackContextMenu } from "../components/TrackContextMenu";
 import { CollectionCard } from "../components/CollectionCard";
 import { HorizontalRail } from "../components/HorizontalRail";
+import { SvgIconMotion } from "../components/SvgMotion";
 
 const MOODS = [
   { id: "all", label: "All" },
@@ -199,7 +200,9 @@ export function HomeView({
       {/* Error State */}
       {error && !feed && (
         <div className="state-panel" role="alert">
-          <Disc size={34} weight="duotone" style={{ color: "var(--status-error)" }} />
+          <SvgIconMotion preset="spin">
+            <Disc size={34} weight="duotone" style={{ color: "var(--status-error)" }} />
+          </SvgIconMotion>
           <h3>Unable to reach YouTube Music catalog</h3>
           <p style={{ color: "var(--ink-muted)", maxWidth: "46ch" }}>{error}</p>
           <button type="button" className="btn btn-primary" onClick={() => loadFeed(mood)}>
@@ -215,7 +218,9 @@ export function HomeView({
             <section className="featured-banner" aria-label="Continue listening session">
               <div className="featured-body">
                 <div className="featured-kicker">
-                  <Sparkle size={16} weight="fill" />
+                  <SvgIconMotion preset="spark">
+                    <Sparkle size={16} weight="fill" />
+                  </SvgIconMotion>
                   <span>
                     {currentTrack && playbackState === "playing"
                       ? "NOW PLAYING SESSION"
@@ -276,7 +281,9 @@ export function HomeView({
             <section className="featured-banner" aria-label="Featured studio album">
               <div className="featured-body">
                 <div className="featured-kicker">
-                  <Waveform size={17} weight="bold" />
+                  <SvgIconMotion preset="wave">
+                    <Waveform size={17} weight="bold" />
+                  </SvgIconMotion>
                   <span>DAILY SPOTLIGHT MIX · {feed.featured.artist}</span>
                 </div>
                 <h2 className="featured-title">{feed.featured.title}</h2>

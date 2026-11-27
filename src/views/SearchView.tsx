@@ -28,6 +28,7 @@ import {
   importSpotifyCollection,
   searchCatalog,
 } from "../lib/api";
+import { AnimatedVibeWave, SvgIconMotion } from "../components/SvgMotion";
 import { usePlayer } from "../context/PlayerContext";
 import { useLibrary } from "../context/LibraryContext";
 import { useSettings } from "../context/SettingsContext";
@@ -485,33 +486,26 @@ export function SearchView({
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <span className="vibe-title">{vibe.label}</span>
                     {vibe.icon === "lightning" ? (
-                      <Lightning size={20} weight="duotone" style={{ color: vibe.accent }} />
+                      <SvgIconMotion preset="spark">
+                        <Lightning size={20} weight="duotone" style={{ color: vibe.accent }} />
+                      </SvgIconMotion>
                     ) : vibe.icon === "waveform" ? (
-                      <Waveform size={20} weight="duotone" style={{ color: vibe.accent }} />
+                      <SvgIconMotion preset="wave">
+                        <Waveform size={20} weight="duotone" style={{ color: vibe.accent }} />
+                      </SvgIconMotion>
                     ) : vibe.icon === "headphones" ? (
-                      <Headphones size={20} weight="duotone" style={{ color: vibe.accent }} />
+                      <SvgIconMotion preset="float">
+                        <Headphones size={20} weight="duotone" style={{ color: vibe.accent }} />
+                      </SvgIconMotion>
                     ) : (
-                      <MusicNotes size={20} weight="duotone" style={{ color: vibe.accent }} />
+                      <SvgIconMotion preset="float">
+                        <MusicNotes size={20} weight="duotone" style={{ color: vibe.accent }} />
+                      </SvgIconMotion>
                     )}
                   </div>
                   <span className="vibe-sub">{vibe.subtitle}</span>
                   {/* Crisp geometric SVG wave motif */}
-                  <svg viewBox="0 0 180 28" className="vibe-wave" aria-hidden="true">
-                    <path
-                      d="M0 18 Q 22 4, 45 16 T 90 14 T 135 16 T 180 10"
-                      fill="none"
-                      stroke={vibe.accent}
-                      strokeOpacity="0.34"
-                      strokeWidth="2"
-                    />
-                    <path
-                      d="M0 24 Q 25 10, 50 22 T 100 18 T 150 22 T 180 16"
-                      fill="none"
-                      stroke={vibe.accent}
-                      strokeOpacity="0.18"
-                      strokeWidth="1.5"
-                    />
-                  </svg>
+                  <AnimatedVibeWave accent={vibe.accent} />
                 </button>
               ))}
             </div>
@@ -650,7 +644,9 @@ export function SearchView({
             artists.length === 0 &&
             (scope === "local" || searchedQuery) && (
               <div className="state-panel">
-                <Disc size={32} weight="duotone" style={{ color: "var(--ink-muted)" }} />
+                <SvgIconMotion preset="spin" duration={4000}>
+                  <Disc size={32} weight="duotone" style={{ color: "var(--ink-muted)" }} />
+                </SvgIconMotion>
                 <h3>No matches found for "{query.trim()}"</h3>
                 <p style={{ color: "var(--ink-muted)" }}>
                   {scope === "local"
