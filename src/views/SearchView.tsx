@@ -396,7 +396,6 @@ export function SearchView({
             [
               { id: "all", label: "All" },
               { id: "songs", label: "Songs" },
-              { id: "videos", label: "Videos" },
               { id: "albums", label: "Albums" },
               { id: "artists", label: "Artists" },
               { id: "playlists", label: "Playlists" },
@@ -613,12 +612,12 @@ export function SearchView({
               </section>
             )}
 
-          {/* Songs / Videos Tracklist */}
+          {/* Songs Tracklist */}
           {sortedTracks.length > 0 &&
-            (scope === "local" || filter === "all" || filter === "songs" || filter === "videos") && (
+            (scope === "local" || filter === "all" || filter === "songs") && (
               <section className="section-block" aria-label="Songs">
                 <h2 className="section-title">
-                  {filter === "videos" ? "Music Videos" : "Songs"} ({sortedTracks.length})
+                  Songs ({sortedTracks.length})
                 </h2>
                 <div className="tracklist-surface">
                   {sortedTracks.map((tr, idx) => (

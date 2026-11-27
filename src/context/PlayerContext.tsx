@@ -114,6 +114,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [drawerTab, setDrawerTab] = useState<DrawerTab>("lyrics");
   const [lyrics, setLyrics] = useState<LyricsPayload | null>(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [silentAudioUrl, setSilentAudioUrl] = useState<string>("");
 
   const currentTrack = queueIndex >= 0 && queueIndex < queue.length ? queue[queueIndex] : null;
 
@@ -401,15 +402,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
       const blob = new Blob([buffer], { type: "audio/wav" });
       createdUrl = URL.createObjectURL(blob);
-      const audio = new Audio(createdUrl);
-      audio.loop = true;
-      audio.volume = 0.08;
-      silentAudioRef.current = audio;
+      setSilentAudioUrl(createdUrl);
     } catch (_) {}
 
     return () => {
       silentAudioRef.current?.pause();
-      silentAudioRef.current = null;
       if (createdUrl) URL.revokeObjectURL(createdUrl);
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {});
@@ -931,13 +928,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-      {/* Non-occluded in-viewport host (prevents mobile Chrome suspending background iframe audio, and docks visibly when Video Stage is active) */}
-      <div
-        className={`yt-audio-host${videoStageOpen && nowPlayingOpen ? " is-video-stage" : ""}`}
-        aria-hidden={!videoStageOpen || !nowPlayingOpen}
-      >
+      {/* Non-occluded in-viewport host (prevents mobile Chrome suspending background iframe audio) */}
+      <div className="yt-audio-host" aria-hidden="true">
         <div ref={hostRef} style={{ width: "100%", height: "100%" }} />
       </div>
+      {/* DOM-anchored persistent audio element for mobile background playback & MediaSession audio focus */}
+      <audio
+        ref={silentAudioRef}
+        src={silentAudioUrl || undefined}
+        loop
+        playsInline
+        preload="auto"
+        style={{
+          position: "fixed",
+          width: 1,
+          height: 1,
+          opacity: 0.01,
+          pointerEvents: "none",
+          zIndex: -999,
+        }}
+      />
     </PlayerContext.Provider>
   );
 }

@@ -54,7 +54,6 @@ export function NowPlayingOverlay({
     lyrics,
     lyricsLoading,
     nowPlayingOpen,
-    videoStageOpen,
     setNowPlayingOpen,
     togglePlayPause,
     nextTrack,
@@ -236,26 +235,18 @@ export function NowPlayingOverlay({
       <div className={`np-stage${mobileView === "lyrics" ? " show-lyrics" : ""}`}>
         {/* Left: Tactile Player Deck */}
         <div className="np-deck">
-          {videoStageOpen ? (
-            <div className="np-video-spacer">
-              <span style={{ fontSize: "var(--text-caption)", color: "var(--ink-muted)" }}>
-                Video Stage Active
-              </span>
-            </div>
-          ) : (
-            <div
-              className={`np-cover${isPlaying ? " is-playing" : " is-paused"}`}
-              onTouchStart={handleSwipeStart}
-              onTouchEnd={handleSwipeEnd}
-            >
-              <Artwork
-                src={currentTrack.artwork}
-                alt={`${currentTrack.title} album art`}
-                priority
-                size={544}
-              />
-            </div>
-          )}
+          <div
+            className={`np-cover${isPlaying ? " is-playing" : " is-paused"}`}
+            onTouchStart={handleSwipeStart}
+            onTouchEnd={handleSwipeEnd}
+          >
+            <Artwork
+              src={currentTrack.artwork}
+              alt={`${currentTrack.title} album art`}
+              priority
+              size={544}
+            />
+          </div>
 
           <div className="np-info-row">
             <button

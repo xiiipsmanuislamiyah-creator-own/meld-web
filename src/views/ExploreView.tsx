@@ -31,7 +31,7 @@ interface ExploreViewProps {
 const CHART_TABS: { id: string; label: string; query: string; filter: SearchFilter }[] = [
   { id: "top-songs", label: "Top Songs", query: "top music hits 2026", filter: "songs" },
   { id: "indo-hits", label: "Indonesia Hits", query: "lagu pop indonesia hits terbaru", filter: "songs" },
-  { id: "top-videos", label: "Music Videos", query: "official music video trending", filter: "videos" },
+  { id: "viral-hits", label: "Viral Hits", query: "lagu viral audio tiktok 2026", filter: "songs" },
   { id: "top-playlists", label: "Top Playlists", query: "top hits chart playlist", filter: "playlists" },
 ];
 
@@ -183,8 +183,10 @@ export function ExploreView({ onOpenCollection, onAddToPlaylist }: ExploreViewPr
                 style={{ borderLeft: `4px solid ${tile.accent}` }}
                 onClick={() => setActiveMood(selected ? null : tile)}
               >
-                <TileIcon kind={tile.icon} color={tile.accent} />
-                <span>{tile.label}</span>
+                <div className="mood-tile-icon-wrap">
+                  <TileIcon kind={tile.icon} color={tile.accent} />
+                </div>
+                <span className="mood-tile-label">{tile.label}</span>
               </button>
             );
           })}

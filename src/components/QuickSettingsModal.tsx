@@ -26,13 +26,11 @@ import {
   Sun,
   Timer,
   Trash,
-  VideoCamera,
   X,
 } from "@phosphor-icons/react";
 import { usePlayer } from "../context/PlayerContext";
 import { useTheme } from "../context/ThemeContext";
 import { useSettings } from "../context/SettingsContext";
-import { useToast } from "../context/ToastContext";
 import { Artwork } from "./Artwork";
 import { EqualizerBars } from "./EqualizerBars";
 import { AudioEqualizerPanel } from "./AudioEqualizerPanel";
@@ -72,7 +70,6 @@ export function QuickSettingsModal({
     eq,
     sleepTimerSec,
     sleepTimerEndOfTrack,
-    videoStageOpen,
     pipMode,
     queue,
     queueIndex,
@@ -84,7 +81,6 @@ export function QuickSettingsModal({
     resetSpeedPitch,
     setSleepTimerMinutes,
     setSleepTimerEndOfTrack,
-    setVideoStageOpen,
     togglePictureInPicture,
     playTrack,
     addToQueue,
@@ -96,7 +92,6 @@ export function QuickSettingsModal({
 
   const { palette, resolvedTheme, setThemePref, dynamicColor, setDynamicColor } = useTheme();
   const { settings, updateSettings } = useSettings();
-  const { notify } = useToast();
 
   const [activeTab, setActiveTab] = useState<QuickSettingsTab>(initialTab);
   const [queueSearchQuery, setQueueSearchQuery] = useState("");
@@ -446,32 +441,8 @@ export function QuickSettingsModal({
                 </div>
               </section>
 
-              {/* 2. Panggung Video & PiP */}
+              {/* 2. Picture-in-Picture (PiP) */}
               <section className="settings-group" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <VideoCamera size={19} style={{ color: "var(--accent)" }} />
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>Panggung Video</div>
-                      <div style={{ fontSize: "0.74rem", color: "var(--ink-muted)" }}>
-                        Tampilkan klip video di layar penuh
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={`btn${videoStageOpen ? " btn-primary" : " btn-secondary"}`}
-                    style={{ minHeight: 34, padding: "0 12px", fontSize: "0.78rem" }}
-                    onClick={() => {
-                      const next = !videoStageOpen;
-                      setVideoStageOpen(next);
-                      notify(next ? "Panggung video aktif" : "Panggung video dinonaktifkan", "info");
-                    }}
-                  >
-                    {videoStageOpen ? "Aktif" : "Nonaktif"}
-                  </button>
-                </div>
-
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <PictureInPicture size={19} style={{ color: "var(--accent)" }} />

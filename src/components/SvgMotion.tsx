@@ -1,5 +1,4 @@
-import React, { useEffect, useRef } from "react";
-import { SVG } from "@svgdotjs/svg.js";
+import React from "react";
 
 export type SvgMotionPreset = "float" | "pulse" | "spin" | "wave" | "spark";
 
@@ -11,85 +10,23 @@ interface SvgIconMotionProps {
 }
 
 /**
- * Wraps any SVG icon (e.g. @phosphor-icons/react) and animates it via @svgdotjs/svg.js.
+ * Wraps any SVG icon (e.g. Phosphor Icons) with high-craft, hardware-accelerated 60fps CSS micro-animations.
+ * Respects prefers-reduced-motion and avoids brittle runtime DOM manipulation.
  */
 export function SvgIconMotion({
   preset = "float",
-  duration = 2400,
+  duration,
   className = "",
   children,
 }: SvgIconMotionProps) {
-  const hostRef = useRef<HTMLSpanElement | null>(null);
-
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const svgEl = host.querySelector("svg");
-    if (!svgEl) return;
-
-    // Respect user reduced-motion preference
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
-
-    const draw = SVG(svgEl);
-    let runner: ReturnType<typeof draw.animate> | null = null;
-
-    try {
-      if (preset === "spin") {
-        runner = draw
-          .animate(duration * 2.5, 0, "now")
-          .ease("-")
-          .rotate(360)
-          .loop(Infinity, false);
-      } else if (preset === "pulse") {
-        runner = draw
-          .animate(duration, 0, "now")
-          .ease("<>")
-          .transform({ scale: 1.12 })
-          .loop(Infinity, true);
-      } else if (preset === "spark") {
-        runner = draw
-          .animate(duration * 0.85, 0, "now")
-          .ease("<>")
-          .transform({ scale: 1.15, rotate: 8 })
-          .loop(Infinity, true);
-      } else if (preset === "wave") {
-        runner = draw
-          .animate(duration * 0.9, 0, "now")
-          .ease("<>")
-          .transform({ translateY: -2, scaleY: 1.08 })
-          .loop(Infinity, true);
-      } else {
-        // float
-        runner = draw
-          .animate(duration, 0, "now")
-          .ease("<>")
-          .transform({ translateY: -2.5 })
-          .loop(Infinity, true);
-      }
-    } catch {
-      // Fallback safely if SVG element cannot be animated
-    }
-
-    return () => {
-      try {
-        runner?.unschedule();
-        draw.timeline().stop();
-      } catch {
-        // Ignore cleanup errors
-      }
-    };
-  }, [preset, duration]);
+  const presetClass = `svg-motion-${preset}`;
+  const style = duration ? { animationDuration: `${duration}ms` } : undefined;
 
   return (
     <span
-      ref={hostRef}
-      className={`svg-motion-wrap ${className}`.trim()}
-      style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+      className={`svg-motion-wrap ${presetClass} ${className}`.trim()}
+      style={style}
+      aria-hidden="true"
     >
       {children}
     </span>
@@ -102,83 +39,58 @@ interface AnimatedVibeWaveProps {
 }
 
 /**
- * Animated geometric SVG wave motif powered by @svgdotjs/svg.js.
+ * Lively geometric SVG wave motif with flowing dual-path harmonics and soft ambient glow.
+ * Pure GPU-accelerated SVG & CSS for zero jitter and 60fps responsiveness on all mobile viewports.
  */
 export function AnimatedVibeWave({ accent, className = "vibe-wave" }: AnimatedVibeWaveProps) {
-  const svgRef = useRef<SVGSVGElement | null>(null);
-
-  useEffect(() => {
-    const svgEl = svgRef.current;
-    if (!svgEl) return;
-
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
-
-    const draw = SVG(svgEl);
-    const paths = draw.find("path");
-    const runners: Array<ReturnType<typeof draw.animate>> = [];
-
-    try {
-      const p1 = paths[0];
-      const p2 = paths[1];
-      if (p1) {
-        runners.push(
-          p1
-            .animate(3200, 0, "now")
-            .ease("<>")
-            .attr({ d: "M0 14 Q 22 24, 45 12 T 90 18 T 135 10 T 180 16" })
-            .loop(Infinity, true),
-        );
-      }
-      if (p2) {
-        runners.push(
-          p2
-            .animate(3800, 200, "now")
-            .ease("<>")
-            .attr({ d: "M0 20 Q 25 26, 50 16 T 100 22 T 150 14 T 180 20" })
-            .loop(Infinity, true),
-        );
-      }
-    } catch {
-      // Ignore animation errors
-    }
-
-    return () => {
-      runners.forEach((r) => {
-        try {
-          r.unschedule();
-        } catch {
-          // Ignore
-        }
-      });
-      try {
-        draw.timeline().stop();
-      } catch {
-        // Ignore
-      }
-    };
-  }, [accent]);
+  // Use unique IDs for SVG gradients based on accent color hex
+  const cleanId = accent.replace(/[^a-zA-Z0-9]/g, "");
+  const gradId = `vibe-grad-${cleanId}`;
 
   return (
-    <svg ref={svgRef} viewBox="0 0 180 28" className={className} aria-hidden="true">
-      <path
-        d="M0 18 Q 22 4, 45 16 T 90 14 T 135 16 T 180 10"
-        fill="none"
-        stroke={accent}
-        strokeOpacity="0.34"
-        strokeWidth="2"
-      />
-      <path
-        d="M0 24 Q 25 10, 50 22 T 100 18 T 150 22 T 180 16"
-        fill="none"
-        stroke={accent}
-        strokeOpacity="0.18"
-        strokeWidth="1.5"
-      />
-    </svg>
+    <div className={className} aria-hidden="true">
+      <svg
+        viewBox="0 0 320 44"
+        preserveAspectRatio="none"
+        className="vibe-wave-svg"
+      >
+        <defs>
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={accent} stopOpacity="0.12" />
+            <stop offset="50%" stopColor={accent} stopOpacity="0.45" />
+            <stop offset="100%" stopColor={accent} stopOpacity="0.12" />
+          </linearGradient>
+        </defs>
+
+        {/* Ambient bottom frequency wash */}
+        <path
+          className="vibe-wave-wash"
+          d="M0 26 Q 40 16, 80 24 T 160 20 T 240 26 T 320 22 L 320 44 L 0 44 Z"
+          fill={accent}
+          fillOpacity="0.08"
+        />
+
+        {/* Secondary Harmonic Wave */}
+        <path
+          className="vibe-wave-path-secondary"
+          d="M -30 26 Q 25 14, 75 25 T 165 18 T 245 27 T 350 20"
+          fill="none"
+          stroke={accent}
+          strokeOpacity="0.45"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        />
+
+        {/* Primary Glowing Wave */}
+        <path
+          className="vibe-wave-path-primary"
+          d="M -20 20 Q 35 6, 85 20 T 175 14 T 265 22 T 340 12"
+          fill="none"
+          stroke={`url(#${gradId})`}
+          strokeWidth="2.8"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
   );
 }

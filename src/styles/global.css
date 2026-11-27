@@ -2099,37 +2099,20 @@ img {
   transform-origin: 15% 85%;
 }
 
-/* === Non-Occluded In-Viewport YouTube IFrame Host + Video Stage === */
+/* === Non-Occluded In-Viewport YouTube IFrame Host === */
 .yt-audio-host {
   position: fixed;
-  width: 240px;
-  height: 135px;
-  right: 6px;
-  bottom: 6px;
-  opacity: 0.05;
+  width: 4px;
+  height: 4px;
+  right: 2px;
+  bottom: 2px;
+  opacity: 0.98;
   pointer-events: none;
-  z-index: -1;
+  z-index: 1;
   overflow: hidden;
   transform: translateZ(0);
   will-change: transform;
-}
-
-.yt-audio-host.is-video-stage {
-  left: 50%;
-  right: auto;
-  top: 82px;
-  bottom: auto;
-  transform: translateX(-50%);
-  width: min(360px, 88vw);
-  height: auto;
-  aspect-ratio: 16 / 9;
-  opacity: 1;
-  pointer-events: auto;
-  z-index: 126;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-artwork);
-  border: 1px solid var(--border-control);
-  background: #0B0D12;
+  clip-path: inset(0 0 0 0);
 }
 
 /* === Mini Now-Playing Pill & Quick Control Popover === */
@@ -2547,8 +2530,100 @@ img {
   right: 0;
   bottom: 0;
   width: 100%;
-  height: 30px;
+  height: 44px;
   pointer-events: none;
+  overflow: hidden;
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+.vibe-wave-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+@keyframes vibeGlide1 {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(-16px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes vibeGlide2 {
+  0% { transform: translateX(-12px); }
+  50% { transform: translateX(8px); }
+  100% { transform: translateX(-12px); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .vibe-wave-path-primary {
+    animation: vibeGlide1 4.5s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .vibe-wave-path-secondary {
+    animation: vibeGlide2 5.5s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .vibe-card:hover .vibe-wave-path-primary {
+    animation-duration: 2.2s;
+  }
+}
+
+/* === Hardware-Accelerated 60fps SVG Micro-Animations === */
+.svg-motion-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+@keyframes svgFloatKey {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3.5px); }
+}
+
+@keyframes svgPulseKey {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0px transparent); }
+  50% { transform: scale(1.18); filter: drop-shadow(0 0 5px var(--accent)); }
+}
+
+@keyframes svgSparkKey {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.22) rotate(-8deg); }
+  75% { transform: scale(1.15) rotate(8deg); }
+}
+
+@keyframes svgWaveKey {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  35% { transform: translateY(-3px) scaleY(1.16); }
+  70% { transform: translateY(1.5px) scaleY(0.92); }
+}
+
+@keyframes svgSpinKey {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .svg-motion-float {
+    animation: svgFloatKey 2.6s ease-in-out infinite;
+  }
+  .svg-motion-pulse {
+    animation: svgPulseKey 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .svg-motion-spark {
+    animation: svgSparkKey 2s ease-in-out infinite;
+  }
+  .svg-motion-wave {
+    animation: svgWaveKey 1.8s ease-in-out infinite;
+  }
+  .svg-motion-spin {
+    animation: svgSpinKey 5s linear infinite;
+  }
 }
 
 .top-result-card {
@@ -2610,7 +2685,7 @@ img {
 /* === Explore Mood Tiles & Top 3 Podium === */
 .mood-tiles-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -2618,22 +2693,47 @@ img {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 54px;
-  padding: 10px 14px;
+  min-height: 52px;
+  padding: 8px 12px;
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-card);
-  font-weight: 600;
-  font-size: 0.9rem;
   text-align: left;
+  overflow: hidden;
+  box-sizing: border-box;
   transition:
     transform var(--dur-fast) var(--ease-press),
-    background-color var(--dur-fast) var(--ease-out-snappy);
+    background-color var(--dur-fast) var(--ease-out-snappy),
+    box-shadow var(--dur-fast) var(--ease-out-snappy);
+}
+
+.mood-tile-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .mood-tile-card.is-active {
   background: var(--surface-active);
   color: var(--accent);
+}
+
+.mood-tile-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.mood-tile-label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .podium-grid {

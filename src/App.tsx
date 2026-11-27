@@ -54,7 +54,7 @@ function MeldWorkspace() {
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [playlistModalTrack, setPlaylistModalTrack] = useState<Track | null>(null);
 
-  const { drawerOpen, setDrawerOpen } = usePlayer();
+  const { drawerOpen, setDrawerOpen, nowPlayingOpen, setNowPlayingOpen } = usePlayer();
 
   const navigateTab = (tab: NavTab) => {
     setActiveTab(tab);
@@ -75,15 +75,95 @@ function MeldWorkspace() {
     window.scrollTo({ top: 0, behavior: "auto" });
   };
 
+  // Push modal history state whenever an overlay opens so hardware back button closes overlay first
+  useEffect(() => {
+    if (nowPlayingOpen) {
+      window.history.pushState({ modal: "now-playing" }, "");
+    }
+  }, [nowPlayingOpen]);
+
+  useEffect(() => {
+    if (quickSettingsOpen) {
+      window.history.pushState({ modal: "quick-settings" }, "");
+    }
+  }, [quickSettingsOpen]);
+
+  useEffect(() => {
+    if (spotifyModalOpen) {
+      window.history.pushState({ modal: "spotify-import" }, "");
+    }
+  }, [spotifyModalOpen]);
+
+  useEffect(() => {
+    if (cmdSearchOpen) {
+      window.history.pushState({ modal: "cmd-search" }, "");
+    }
+  }, [cmdSearchOpen]);
+
+  useEffect(() => {
+    if (playlistModalTrack) {
+      window.history.pushState({ modal: "playlist-track" }, "");
+    }
+  }, [playlistModalTrack]);
+
+  // Unified popstate listener for back button navigation (closing modals/overlays or returning to previous view)
   useEffect(() => {
     const onPopState = () => {
+      // 1. If Full Player overlay is open, close it first
+      if (nowPlayingOpen) {
+        setNowPlayingOpen(false);
+        return;
+      }
+      // 2. If any modal is open, close it
+      if (quickSettingsOpen) {
+        setQuickSettingsOpen(false);
+        return;
+      }
+      if (spotifyModalOpen) {
+        setSpotifyModalOpen(false);
+        return;
+      }
+      if (cmdSearchOpen) {
+        setCmdSearchOpen(false);
+        return;
+      }
+      if (playlistModalTrack) {
+        setPlaylistModalTrack(null);
+        return;
+      }
+
+      // 3. If collection view is open, return to active tab
+      if (activeCollectionId) {
+        setActiveCollectionId(null);
+        const nextUrl = activeTab === "home" ? "/" : `/${activeTab}`;
+        window.history.replaceState({ tab: activeTab, collectionId: null }, "", nextUrl);
+        return;
+      }
+
+      // 4. If on sub-page (explore, search, library, settings), return to home
       const parsed = parseInitialRoute();
-      setActiveTab(parsed.tab);
-      setActiveCollectionId(parsed.collectionId);
+      if (parsed.tab !== activeTab || parsed.collectionId !== activeCollectionId) {
+        setActiveTab(parsed.tab);
+        setActiveCollectionId(parsed.collectionId);
+      } else if (activeTab !== "home") {
+        setActiveTab("home");
+        setActiveCollectionId(null);
+        window.history.replaceState({ tab: "home", collectionId: null }, "", "/");
+      }
     };
+
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [
+    nowPlayingOpen,
+    quickSettingsOpen,
+    spotifyModalOpen,
+    cmdSearchOpen,
+    playlistModalTrack,
+    activeCollectionId,
+    activeTab,
+    setNowPlayingOpen,
+  ]);
 
   // Global Cmd+K / Ctrl+K shortcut for instant search palette
   useEffect(() => {
