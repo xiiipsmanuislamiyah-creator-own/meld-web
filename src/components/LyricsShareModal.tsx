@@ -259,15 +259,9 @@ export function LyricsShareModal({
       elapsedSec: number,
       totalSec: number,
     ) => {
-      // 1. Smooth Musical DJ Beat Pulse (~124 BPM) without erratic screen jitter
+      // 1. Smooth Musical DJ Rhythm (~124 BPM) - Rock-solid canvas stage, zero screen twitching
       const bpm = 124;
-      const beatCycle = (elapsedSec * (bpm / 60)) % 1;
-      const kick = Math.pow(Math.max(0, 1 - beatCycle * 2.8), 2.2);
       const subWave = 0.5 + 0.5 * Math.sin(elapsedSec * 2.5);
-      const energy = 0.25 + kick * 0.75;
-
-      // Tactile scale bump on the beat downbeat (clean musical punch, no screen displacement)
-      const pulseScale = grooveDJ ? (1 + kick * 0.022) : 1;
 
       ctx.save();
       ctx.fillStyle = themeColors.bg;
@@ -283,11 +277,11 @@ export function LyricsShareModal({
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, w, h);
 
-      // Blurred cover backdrop on dark/chroma modes
+      // Blurred cover backdrop on dark/chroma modes (steady opacity, zero strobe flash)
       const img = artworkImgRef.current;
       if (img && cardTheme !== "paper") {
         ctx.save();
-        ctx.globalAlpha = 0.16 + kick * 0.04;
+        ctx.globalAlpha = 0.18;
         const coverScale = Math.max(w / img.width, h / img.height) * 1.12;
         const bw = img.width * coverScale;
         const bh = img.height * coverScale;
@@ -302,12 +296,7 @@ export function LyricsShareModal({
         ctx.fillRect(0, 0, w, h);
       }
 
-      // Apply tactile musical pulse transform to stage
-      ctx.translate(cx, cy);
-      ctx.scale(pulseScale, pulseScale);
-      ctx.translate(-cx, -cy);
-
-      // Top Track Badge
+      // Top Track Badge (Rock-solid stationary positioning)
       const topY = aspect === "9:16" ? h * 0.08 : h * 0.075;
       ctx.textAlign = "center";
       ctx.fillStyle = themeColors.accent;
@@ -315,31 +304,29 @@ export function LyricsShareModal({
       ctx.fillText("NOW PLAYING · MELD STUDIO", cx, topY);
 
       ctx.fillStyle = themeColors.ink;
-      ctx.font = `700 ${Math.round(w * 0.044)}px "Bricolage Grotesque", sans-serif`;
+      ctx.font = `700 ${Math.round(w * 0.044)}px "Bricolage Grotesque", -apple-system, sans-serif`;
       const safeTitle = track.title.length > 28 ? `${track.title.slice(0, 27)}…` : track.title;
       ctx.fillText(safeTitle, cx, topY + w * 0.058);
 
       ctx.fillStyle = themeColors.muted;
-      ctx.font = `500 ${Math.round(w * 0.03)}px "Plus Jakarta Sans", sans-serif`;
+      ctx.font = `500 ${Math.round(w * 0.03)}px "Plus Jakarta Sans", -apple-system, sans-serif`;
       const safeArtist = track.artist.length > 34 ? `${track.artist.slice(0, 33)}…` : track.artist;
       ctx.fillText(safeArtist, cx, topY + w * 0.098);
 
       // 2. Spinning Vinyl / CD Disc
       const discRadius = aspect === "9:16" ? w * 0.255 : w * 0.21;
 
-      // Radial Audio Visualizer Bars
+      // Radial Audio Visualizer Bars (Harmonic smooth sine curves, zero erratic jitter)
       if (showVisualizer) {
-        const barCount = 52;
+        const barCount = 54;
         ctx.save();
         ctx.translate(cx, cy);
         for (let i = 0; i < barCount; i++) {
-          const angle = (i / barCount) * Math.PI * 2 + elapsedSec * 0.22;
-          const isBassBar = i % 4 === 0;
-          const wave =
-            Math.abs(Math.sin(i * 0.45 + elapsedSec * 3.8)) * 0.55 +
-            Math.abs(Math.cos(i * 0.22 - elapsedSec * 2.2)) * 0.45;
-          const amp = isBassBar ? (wave * 0.4 + kick * 0.6) : wave;
-          const barLen = 10 + amp * energy * (w * 0.092);
+          const angle = (i / barCount) * Math.PI * 2 + elapsedSec * 0.26;
+          const harmonic1 = Math.sin(i * 0.38 + elapsedSec * 2.6);
+          const harmonic2 = Math.cos(i * 0.72 - elapsedSec * 1.8);
+          const wave = 0.35 + 0.35 * harmonic1 + 0.3 * Math.abs(harmonic2);
+          const barLen = 8 + wave * (w * 0.076);
           const innerR = discRadius + 14;
           const x1 = Math.cos(angle) * innerR;
           const y1 = Math.sin(angle) * innerR;
@@ -347,8 +334,8 @@ export function LyricsShareModal({
           const y2 = Math.sin(angle) * (innerR + barLen);
 
           ctx.strokeStyle = themeColors.accent;
-          ctx.globalAlpha = 0.42 + amp * 0.54;
-          ctx.lineWidth = Math.max(3, w * 0.0068);
+          ctx.globalAlpha = 0.36 + wave * 0.48;
+          ctx.lineWidth = Math.max(3, w * 0.0065);
           ctx.lineCap = "round";
           ctx.beginPath();
           ctx.moveTo(x1, y1);
@@ -362,7 +349,12 @@ export function LyricsShareModal({
       ctx.save();
       ctx.translate(cx, cy);
       if (spinDisc) {
-        ctx.rotate(elapsedSec * 0.82);
+        ctx.rotate(elapsedSec * 0.72);
+      }
+      if (grooveDJ) {
+        // Silky micro-scale pulsation applied ONLY to vinyl disc (never the screen/text)
+        const discPulse = 1 + Math.sin(elapsedSec * Math.PI * (bpm / 60)) * 0.012;
+        ctx.scale(discPulse, discPulse);
       }
 
       // Outer vinyl rim
@@ -422,7 +414,7 @@ export function LyricsShareModal({
 
       ctx.restore();
 
-      // 3. Bottom Spectrum Waveform Bars
+      // 3. Bottom Spectrum Waveform Bars (Silky smooth harmonic audio visualizer)
       if (showVisualizer) {
         const waveBars = 36;
         const waveW = w * 0.72;
@@ -432,13 +424,14 @@ export function LyricsShareModal({
         for (let i = 0; i < waveBars; i++) {
           const norm = i / waveBars;
           const envelope = Math.sin(norm * Math.PI);
-          const isLow = i < 10;
-          const dynamicAmp = isLow
-            ? (0.35 + kick * 0.65) * envelope
-            : (0.25 + 0.75 * Math.abs(Math.sin(i * 0.58 + elapsedSec * 4.2))) * envelope;
-          const barH = Math.max(6, dynamicAmp * (w * 0.085));
+          const harmonic =
+            0.32 +
+            0.4 * Math.abs(Math.sin(i * 0.45 + elapsedSec * 3.2)) +
+            0.28 * Math.abs(Math.cos(i * 0.28 - elapsedSec * 1.8));
+          const dynamicAmp = harmonic * envelope;
+          const barH = Math.max(6, dynamicAmp * (w * 0.082));
           ctx.fillStyle = themeColors.accent;
-          ctx.globalAlpha = 0.35 + dynamicAmp * 0.6;
+          ctx.globalAlpha = 0.35 + dynamicAmp * 0.55;
           ctx.beginPath();
           ctx.roundRect(startX + i * step, baseY - barH / 2, step * 0.58, barH, 4);
           ctx.fill();
@@ -489,7 +482,7 @@ export function LyricsShareModal({
       }
 
       const fontSize = Math.round(w * (aspect === "9:16" ? 0.044 : 0.04));
-      ctx.font = `700 ${fontSize}px "Bricolage Grotesque", sans-serif`;
+      ctx.font = `700 ${fontSize}px "Bricolage Grotesque", -apple-system, sans-serif`;
       const wrapped = wrapCanvasText(ctx, activeText, w * 0.82);
 
       // Active word calculation by character length weighting
@@ -515,7 +508,12 @@ export function LyricsShareModal({
 
       wrapped.slice(0, 2).forEach((rowText, rowIdx) => {
         const rowWords = rowText.split(/\s+/).filter(Boolean);
-        const spaceW = ctx.measureText("  ").width;
+        // Explicitly enforce font, left alignment, and alphabetic baseline to guarantee 0 word overlap
+        ctx.font = `700 ${fontSize}px "Bricolage Grotesque", -apple-system, sans-serif`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+
+        const spaceW = ctx.measureText(" ").width;
         const wordWidths = rowWords.map((word) => ctx.measureText(word).width);
         const totalRowW =
           wordWidths.reduce((a, b) => a + b, 0) + Math.max(0, rowWords.length - 1) * spaceW;
@@ -550,7 +548,7 @@ export function LyricsShareModal({
       // Preview of upcoming lyric line
       if (nextText) {
         ctx.textAlign = "center";
-        ctx.font = `500 ${Math.round(w * 0.028)}px "Plus Jakarta Sans", sans-serif`;
+        ctx.font = `500 ${Math.round(w * 0.028)}px "Plus Jakarta Sans", -apple-system, sans-serif`;
         ctx.fillStyle = themeColors.muted;
         ctx.globalAlpha = 0.62;
         const preview = nextText.length > 44 ? `${nextText.slice(0, 43)}…` : nextText;
@@ -610,7 +608,7 @@ export function LyricsShareModal({
               p.x = Math.random() * w;
             }
             ctx.fillStyle = themeColors.accent;
-            ctx.globalAlpha = p.alpha * (0.55 + kick * 0.45);
+            ctx.globalAlpha = p.alpha * (0.55 + subWave * 0.35);
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.r * 1.15, 0, Math.PI * 2);
             ctx.fill();
