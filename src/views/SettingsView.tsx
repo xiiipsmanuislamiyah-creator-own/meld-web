@@ -26,6 +26,7 @@ import { useLibrary } from "../context/LibraryContext";
 import { useToast } from "../context/ToastContext";
 import { AudioEqualizerPanel } from "../components/AudioEqualizerPanel";
 import { DeveloperProfileCard } from "../components/DeveloperProfileCard";
+import { OfficialNativeAppCard } from "../components/OfficialNativeAppCard";
 
 type SettingsCategory = "all" | "appearance" | "player" | "lyrics" | "content" | "data" | "info";
 
@@ -233,12 +234,15 @@ export function SettingsView() {
       )}
 
       {/* PLAYER & AUDIO */}
-      {matches("player", "speed playback pitch nada equalizer eq bass dsp skip duration radio keep paused error swipe pip background") && (
+      {matches("player", "speed playback pitch nada equalizer eq bass dsp skip duration radio keep paused error swipe pip background apk native android resmi download unduh") && (
         <section className="settings-section">
           <div className="settings-section-head">
             <Headphones size={18} weight="fill" style={{ color: "var(--accent)" }} />
             <h2>Player, Pitch &amp; Equalizer</h2>
           </div>
+
+          {/* Rekomendasi Resmi Aplikasi Android Native untuk Background Play */}
+          <OfficialNativeAppCard variant="card" />
 
           <div className="settings-card">
             <div className="settings-row">

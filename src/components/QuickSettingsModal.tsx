@@ -35,6 +35,7 @@ import { Artwork } from "./Artwork";
 import { EqualizerBars } from "./EqualizerBars";
 import { AudioEqualizerPanel } from "./AudioEqualizerPanel";
 import { DeveloperProfileCard } from "./DeveloperProfileCard";
+import { OfficialNativeAppCard } from "./OfficialNativeAppCard";
 import { formatTime } from "../lib/waveform";
 import { fetchUpNextRadio, searchCatalog } from "../lib/api";
 import { semitonesToRatio } from "../lib/audioDsp";
@@ -597,6 +598,9 @@ export function QuickSettingsModal({
                   </div>
                 </div>
               </section>
+
+              {/* Rekomendasi APK Native Resmi untuk Background Play */}
+              <OfficialNativeAppCard variant="compact" />
             </div>
           )}
 
@@ -841,7 +845,8 @@ export function QuickSettingsModal({
 
           {/* TAB 4: INFO & PROFIL PENGEMBANG (RHMT OFC) */}
           {activeTab === "info" && (
-            <div className="view-enter">
+            <div className="view-enter" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <OfficialNativeAppCard variant="compact" />
               <DeveloperProfileCard
                 compact
                 onOpenFullSettings={

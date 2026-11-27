@@ -24,6 +24,7 @@ import { TrackContextMenu } from "../components/TrackContextMenu";
 import { CollectionCard } from "../components/CollectionCard";
 import { HorizontalRail } from "../components/HorizontalRail";
 import { SvgIconMotion } from "../components/SvgMotion";
+import { OfficialNativeAppCard } from "../components/OfficialNativeAppCard";
 
 const MOODS = [
   { id: "all", label: "All" },
@@ -184,6 +185,9 @@ export function HomeView({
           </button>
         ))}
       </div>
+
+      {/* Official Native Android APK Recommendation Banner */}
+      <OfficialNativeAppCard variant="banner" />
 
       {/* Loading Skeleton */}
       {loading && !feed && (
